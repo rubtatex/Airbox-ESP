@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Airbox-ESP — Test</title>
+<link rel="stylesheet" href="style.css?v=11">
+</head>
+<body>
+
+<header>
+  <h1>Airbox-ESP — Test app</h1>
+  <p class="warn">WARNING: raw developer test tool. Controls a breath-control device — read the firmware's <code>API.md</code>/<code>CLAUDE.md</code> before use.</p>
+</header>
+
+<section id="panel-connection-wifi" class="panel">
+  <h2>WiFi connection (REST + WebSocket)</h2>
+  <p class="hint">Independent of the Bluetooth connection below: nothing here triggers a BLE connection, and vice versa.</p>
+  <div class="row">
+    <label>REST base URL
+      <input id="baseUrl" type="text" placeholder="http://airbox.local">
+    </label>
+    <label>API key
+      <input id="apiKey" type="text" placeholder="API key (32 hex characters)">
+    </label>
+  </div>
+  <div class="row">
+    <button id="btnSaveConnection">Save and connect</button>
+    <button id="btnDisconnectWifi">Stop refreshing</button>
+    <span id="connectionStatus" class="status"></span>
+  </div>
+</section>
+
+<section id="panel-safety" class="panel panel-safety">
+  <h2>Safety</h2>
+  <div class="safety-state">
+    State: <span id="safetyStateBadge" class="badge badge-unknown">?</span>
+    <span id="rebreathCountdown"></span>
+    <span id="airCountdown"></span>
+  </div>
+  <div class="row">
+    <button id="btnArm">ARM</button>
+    <button id="btnDisarm">DISARM</button>
+    <button id="btnRearm">REARM</button>
+    <button id="btnEstop" class="btn-estop">EMERGENCY STOP</button>
+  </div>
+  <div class="row">
+    <button id="btnSafetyStatus">Refresh safety status</button>
+  </div>
+  <p class="hint">Independent settings: each field is sent separately (leave empty = unchanged).</p>
+  <div class="row">
+    <label>Re-Breath cap (ms)
+      <input id="rebreathCapMs" type="number" min="5000" max="300000" step="1000" placeholder="120000">
+    </label>
+    <label>Air closed cap (ms)
+      <input id="airCapMs" type="number" min="5000" max="300000" step="1000" placeholder="120000">
+    </label>
+    <button id="btnSetSafetyConfig">Apply</button>
+  </div>
+</section>
+
+<section id="panel-system" class="panel">
+  <h2>System</h2>
+  <div class="row">
+    <button id="btnSystemInfo">GET /system/info</button>
+    <button id="btnSystemStatus">GET /system/status</button>
+    <button id="btnReboot">Reboot</button>
+    <button id="btnFactoryReset" class="btn-danger">Factory reset</button>
+    <button id="btnRegenerateKey" class="btn-danger">Regenerate key</button>
+  </div>
+  <div class="row">
+    <button id="btnWifiForget">Forget WiFi (back to 100% local)</button>
+  </div>
+  <div class="row">
+    <label>Display language
+      <select id="languageSelect">
+        <option value="en">en</option>
+        <option value="fr">fr</option>
+      </select>
+    </label>
+    <button id="btnGetLanguage">Refresh</button>
+    <button id="btnSetLanguage">Apply</button>
+  </div>
+  <pre id="systemOutput" class="output"></pre>
+</section>
+
+<section id="panel-ota" class="panel">
+  <h2>Firmware update (OTA)</h2>
+  <p class="warn">Requires the system to be DISARMED (refused otherwise). The device reboots automatically after a successful flash — expect a few seconds of downtime. A failure (invalid image, interrupted upload) does not affect the currently installed firmware.</p>
+  <div class="row">
+    <input id="otaFile" type="file" accept=".bin">
+    <button id="btnOtaUpload">Upload and flash</button>
+  </div>
+  <div class="row">
+    <progress id="otaProgress" value="0" max="100" style="width: 100%;"></progress>
+    <span id="otaStatus" class="status"></span>
+  </div>
+</section>
+
+<section id="panel-wifi" class="panel">
+  <h2>WiFi</h2>
+  <div class="row">
+    <span class="status">Connected to: <strong id="wifiConnectedSsid">—</strong></span>
+    <button id="btnWifiStatus">Refresh status</button>
+    <button id="btnWifiScan">Scan</button>
+  </div>
+
+  <div id="wifiNetworksList" class="network-list">
+    <p class="hint">Click "Scan" to see networks in range.</p>
+  </div>
+
+  <details class="manual-wifi">
+    <summary>Manual connection (hidden SSID or direct entry)</summary>
+    <div class="row">
+      <label>SSID <input id="wifiSsid" type="text"></label>
+      <label>Password <input id="wifiPassword" type="password"></label>
+      <button id="btnWifiConfig">Configure</button>
+    </div>
+  </details>
+
+  <pre id="wifiOutput" class="output"></pre>
+</section>
+
+<section id="panel-relays" class="panel">
+  <h2>Relays</h2>
+  <div class="relay-cards">
+    <div class="relay-card" data-relay="air">
+      <h3>Air (NO)</h3>
+      <div class="relay-state">state: <span class="relay-label">?</span></div>
+      <div class="row">
+        <button class="btn-relay-refresh">Refresh</button>
+        <button class="btn-relay-on">Set ON</button>
+        <button class="btn-relay-off">Set OFF</button>
+        <button class="btn-relay-toggle">Toggle</button>
+      </div>
+    </div>
+    <div class="relay-card" data-relay="rebreath">
+      <h3>Re-Breath (NC)</h3>
+      <div class="relay-state">state: <span class="relay-label">?</span></div>
+      <div class="row">
+        <button class="btn-relay-refresh">Refresh</button>
+        <button class="btn-relay-on">Set ON</button>
+        <button class="btn-relay-off">Set OFF</button>
+        <button class="btn-relay-toggle">Toggle</button>
+      </div>
+    </div>
+    <div class="relay-card" data-relay="aroma">
+      <h3>Aroma (pump)</h3>
+      <div class="relay-state">state: <span class="relay-label">?</span></div>
+      <div class="row">
+        <button class="btn-relay-refresh">Refresh</button>
+        <button class="btn-relay-on">Set ON</button>
+        <button class="btn-relay-off">Set OFF</button>
+        <button class="btn-relay-toggle">Toggle</button>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <button id="btnRelaysList">Refresh all 3 relays</button>
+  </div>
+</section>
+
+<section id="panel-display" class="panel">
+  <h2>Display</h2>
+  <div class="row">
+    <label>Line 1 <input id="displayLine1" type="text" maxlength="16"></label>
+    <label>Line 2 <input id="displayLine2" type="text" maxlength="16"></label>
+    <label>Duration (ms) <input id="displayDuration" type="number" value="3000"></label>
+    <button id="btnDisplayText">Send</button>
+  </div>
+</section>
+
+<section id="panel-ws" class="panel">
+  <h2>Real-time WebSocket</h2>
+  <div class="row">
+    <button id="btnWsConnect">Connect</button>
+    <button id="btnWsDisconnect">Disconnect</button>
+    <span id="wsStatus" class="status"></span>
+  </div>
+  <pre id="wsOutput" class="output"></pre>
+</section>
+
+<section id="panel-ble" class="panel">
+  <h2>Bluetooth connection (BLE)</h2>
+  <p class="hint">Independent of the WiFi connection above. Chrome/Edge only, page served over http://localhost (not file://). See README.</p>
+  <div class="row">
+    <button id="btnBleConnect">Connect over BLE</button>
+    <button id="btnBleDisconnect">Disconnect</button>
+    <span id="bleStatus" class="status"></span>
+  </div>
+  <pre id="bleStateOutput" class="output"></pre>
+  <div class="row">
+    <button id="btnCopyKeyFromBle">Copy the key received over BLE into the WiFi field</button>
+  </div>
+
+  <h3>Commands (CMD characteristic)</h3>
+  <div class="row">
+    <button id="btnBleArm">arm</button>
+    <button id="btnBleDisarm">disarm</button>
+    <button id="btnBleRearm">rearm</button>
+    <button id="btnBleEstop" class="btn-estop">ESTOP (dedicated characteristic)</button>
+  </div>
+  <div class="row">
+    <label>Relay
+      <select id="bleRelaySelect">
+        <option value="air">air</option>
+        <option value="rebreath">rebreath</option>
+        <option value="aroma">aroma</option>
+      </select>
+    </label>
+    <button id="btnBleRelayOn">Set ON</button>
+    <button id="btnBleRelayOff">Set OFF</button>
+    <button id="btnBleRelayToggle">Toggle</button>
+  </div>
+  <div class="row">
+    <label>Re-Breath cap (ms) <input id="bleRebreathCapMs" type="number" min="5000" max="300000" step="1000" placeholder="120000"></label>
+    <label>Air closed cap (ms) <input id="bleAirCapMs" type="number" min="5000" max="300000" step="1000" placeholder="120000"></label>
+    <button id="btnBleSafetyConfig">safety.config</button>
+  </div>
+  <div class="row">
+    <label>Line 1 <input id="bleDisplayLine1" type="text" maxlength="16"></label>
+    <label>Line 2 <input id="bleDisplayLine2" type="text" maxlength="16"></label>
+    <label>Duration (ms) <input id="bleDisplayDuration" type="number" value="3000"></label>
+    <button id="btnBleDisplayText">display.text</button>
+  </div>
+  <div class="row">
+    <label>Language
+      <select id="bleLanguageSelect">
+        <option value="en">en</option>
+        <option value="fr">fr</option>
+      </select>
+    </label>
+    <button id="btnBleSetLanguage">system.language</button>
+  </div>
+
+  <h3>WiFi scan (over BLE, cmd wifi.scan)</h3>
+  <div class="row">
+    <button id="btnBleWifiScan">Scan WiFi over BLE</button>
+  </div>
+  <div id="bleWifiResults" class="network-list">
+    <p class="hint">No scan started yet.</p>
+  </div>
+
+  <h3>WiFi provisioning (WIFI_CONFIG characteristic)</h3>
+  <p class="hint">Used automatically when clicking "Connect" above, or manually here (e.g. hidden SSID).</p>
+  <div class="row">
+    <label>SSID <input id="bleWifiSsid" type="text"></label>
+    <label>Password <input id="bleWifiPassword" type="password"></label>
+    <button id="btnBleWifiConfig">Send WIFI_CONFIG</button>
+  </div>
+
+  <h3>Forget WiFi (cmd wifi.forget)</h3>
+  <div class="row">
+    <button id="btnBleWifiForget">wifi.forget (back to 100% local)</button>
+  </div>
+</section>
+
+<section id="panel-log" class="panel">
+  <h2>Activity log</h2>
+  <div class="row">
+    <button id="btnClearLog">Clear</button>
+  </div>
+  <pre id="activityLog" class="output log"></pre>
+</section>
+
+<script src="api.js?v=11"></script>
+<script src="ble.js?v=11"></script>
+<script src="app.js?v=11"></script>
+</body>
+</html>
