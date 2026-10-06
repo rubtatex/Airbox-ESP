@@ -89,4 +89,4 @@ PlatformIO installs the dependencies listed in [platformio.ini](platformio.ini):
 
 ## License
 
-No license has been chosen yet. Until one is added, all rights are reserved by the author.
+Released under the [MIT License](LICENSE). As the license states, the software is provided "as is", without warranty of any kind; see also the warning at the top of this file.
