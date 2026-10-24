@@ -57,7 +57,7 @@ jobs:
         run: |
           flags=""
           case "$TAG" in *-*) flags="--prerelease" ;; esac
-if gh release view "$TAG" > /dev/null 2>&1; then
+          if gh release view "$TAG" > /dev/null 2>&1; then
             # Release already made from the GitHub web page: attach the files to it.
             gh release upload "$TAG" dist/* --clobber
           else
