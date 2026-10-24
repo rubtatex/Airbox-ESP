@@ -213,6 +213,8 @@ Defined in `Config.h`. Full protocol details in `API.md`.
 
 ## PlatformIO commands
 
+**The platform is pinned to `espressif32@6.9.0`** (Arduino-ESP32 core 2.0.x) in `platformio.ini`, on purpose. With the latest unpinned platform (Arduino core 3.x) the build fails (`redefinition of 'class NetworkManager'`: the 3.x core ships a class and a header with that name), and even with the class renamed the image grows to ~2.2 MB, above the 1.875 MB OTA slot. Do not unpin it without checking both. The firmware is ~1.4 MB with the pinned platform.
+
 ```
 pio run                 # build
 pio run -t upload       # flash
