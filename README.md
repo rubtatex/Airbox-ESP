@@ -53,6 +53,10 @@ pio device monitor      # serial monitor, 115200 baud (prints the API key at boo
 
 PlatformIO installs the dependencies listed in [platformio.ini](platformio.ini): U8g2, QRCode, ArduinoJson, NimBLE-Arduino, ESPAsyncWebServer and AsyncTCP (ESP32Async forks).
 
+### Releases
+
+Pushing a tag `vMAJOR.MINOR.PATCH` (e.g. `git tag v1.2.0 && git push origin v1.2.0`) builds the firmware and publishes a GitHub release with `airbox-esp-<version>.bin` (the OTA image) and its `.sha256`. The version is reported as `version` by `GET /api/system/info`; local builds report `dev`. A tag with a suffix (`v1.3.0-beta1`) makes a pre-release, which the app ignores. The Airbox iOS app reads the latest release to offer the update.
+
 ## Tests
 
 The sequence format and state machine are plain C++ and have host-side tests (no board needed, only `g++`):

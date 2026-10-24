@@ -1,0 +1,60 @@
+# Publishes a firmware release when a version tag is pushed:
+#   git tag v1.2.0 && git push origin v1.2.0
+# The release carries the OTA image (airbox-esp-1.2.0.bin) and its SHA-256 (airbox-esp-1.2.0.bin.sha256).
+# The Airbox iOS app reads the latest release of this repository to offer the update.
+name: Release firmware
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host-side tests
+        run: ./test/host/run.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          PLATFORMIO_BUILD_FLAGS="-DFIRMWARE_VERSION=\\\"$VERSION\\\"" pio run
+          mkdir -p dist
+          cp .pio/build/seeed_xiao_esp32c3/firmware.bin "dist/airbox-esp-$VERSION.bin"
+          (cd dist && sha256sum "airbox-esp-$VERSION.bin" > "airbox-esp-$VERSION.bin.sha256")
+          ls -l dist
+
+      - name: Check the image fits an OTA slot
+        run: |
+          size=$(stat -c %s "dist/airbox-esp-$VERSION.bin")
+          echo "image: $size bytes (slot: 1966080)"
+          test "$size" -le 1966080
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags=""
+          case "$TAG" in *-*) flags="--prerelease" ;; esac
+          gh release create "$TAG" dist/* --title "Airbox firmware $VERSION" --generate-notes $flags

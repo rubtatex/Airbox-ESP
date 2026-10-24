@@ -74,12 +74,13 @@ Every other route requires authentication.
 
 ### `GET /api/system/info` *(no auth)*
 ```json
-{ "firmware": "airbox-esp", "uptimeMs": 123456, "freeHeap": 180000, "chipModel": "ESP32-C3", "sequenceVersion": 1 }
+{ "firmware": "airbox-esp", "version": "1.2.0", "uptimeMs": 123456, "freeHeap": 180000, "chipModel": "ESP32-C3", "sequenceVersion": 1 }
 ```
+`version` is the release number (`MAJOR.MINOR.PATCH`, no leading `v`) of the installed firmware, `"dev"` for a build made locally, and missing on firmware older than the release process. Compare it with the latest release of the GitHub repository to offer an update (see `POST /api/system/ota`).
 `sequenceVersion` (`1`) says this firmware can play sequences, see the "Sequences" section; it is missing on older firmware.
 The `apiKey` field is added **only** while the device is in fallback access-point mode (initial WiFi setup, see Authentication section):
 ```json
-{ "firmware": "airbox-esp", "uptimeMs": 4210, "freeHeap": 182000, "chipModel": "ESP32-C3", "apiKey": "c7e90609ca27f7bfb3851aa8a60c6f02" }
+{ "firmware": "airbox-esp", "version": "1.2.0", "uptimeMs": 4210, "freeHeap": 182000, "chipModel": "ESP32-C3", "apiKey": "c7e90609ca27f7bfb3851aa8a60c6f02" }
 ```
 
 ### `GET /api/system/status`

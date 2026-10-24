@@ -223,6 +223,7 @@ void WebApi::setupRoutes() {
   server_.on("/api/system/info", HTTP_GET, [this](AsyncWebServerRequest* request) {
     JsonDocument doc;
     doc["firmware"] = "airbox-esp";
+    doc["version"] = FIRMWARE_VERSION;
     doc["uptimeMs"] = millis();
     doc["freeHeap"] = ESP.getFreeHeap();
     doc["chipModel"] = ESP.getChipModel();
