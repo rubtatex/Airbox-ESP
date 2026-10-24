@@ -18,14 +18,17 @@ The API always exposes the **logical** state of each relay (`OPEN`/`CLOSED`/`RUN
 
 The device has a local OLED screen (status, connection QR code, etc.) — the app is an **additional control channel**, not the only way to interact with the unit.
 
-### Automations/sequences: the app's responsibility
+### Sequences: played on the Airbox
 
-The firmware does **not** run any multi-step sequence on its own — no "scripts" stored or executed on the ESP32. If the app offers automations (e.g. "open Re-Breath for 5s, close, repeat 3 times"), the app orchestrates them by sending commands one by one (`relay.set`, etc.) with its own timing, using the atomic endpoints below.
+A sequence (e.g. "open Re-Breath for 20 s, close, wait 10 s, repeat 3 times") is **played by the firmware**, so a brief loss of the phone's connection does not interrupt it. The firmware does not interpret a script: the app **unrolls** the sequence first (loops expanded, random waits drawn) into a flat, time-sorted list of relay events, sends it, then starts it. See the "Sequences" section below for the format and the routes.
 
-**Important implication**: if the app loses its connection (BLE/WiFi) while a sequence is running, the sequence stops immediately — no further commands reach the firmware. This is not a firmware bug to fix; it is the expected behavior of this architecture. The app must:
-- Detect a connection loss during a sequence and clearly warn the user (never let them believe the sequence is still running).
-- Never assume a relay stayed in the intended state after reconnecting — always re-read the actual state (`GET /api/relays` or `STATE`) before resuming/displaying anything.
-- Not rely on this architecture for safety-critical timing: the Re-Breath cap (see "Safety model") is enforced **by the firmware** independently of the app, precisely because a phone-driven sequence cannot be guaranteed to complete.
+What the app must keep in mind:
+- A sequence only starts when the system is `armed`, and every relay change still goes through the same safety gate as a manual command: the Re-Breath / Air caps keep applying, and nothing can energize a relay outside `armed`.
+- A sequence always ends with **all relays de-energized** (completed, stopped, aborted).
+- **Emergency stop and disarm end the sequence** immediately.
+- **The app must stay in contact.** If the Airbox hears nothing from the app (no authenticated request or BLE command) for `holdMs` (default 30 s), it aborts the sequence and de-energizes everything. While a sequence runs, send `POST /api/sequence/keepalive` (or the BLE `sequence.keepalive`) every few seconds. Short drop-outs are absorbed, a real loss of contact is not left running.
+- Nothing is saved: the sequence lives in RAM. A reboot forgets it and the Airbox comes back `disarmed`.
+- Firmware that does not know sequences ignores the commands: check `sequenceVersion` (in `GET /api/system/info`, or in the BLE `STATE`) before relying on this, and fall back to driving the relays one command at a time (`relay.set`) from the app otherwise.
 
 ## Safety model (the app must respect it)
 
@@ -39,7 +42,7 @@ DISARMED (idle state, including right after boot)
 ```
 
 - **`disarmed`**: no relay can be energized (so `air` stays open/safe, `rebreath` stays closed, `aroma` stays stopped). This is the idle state.
-- **`armed`**: relay commands work normally.
+- **`armed`**: relay commands work normally, and sequences can start.
 - **`estop`** (emergency stop): all 3 relays are immediately forced to the de-energized (safe) state. An **explicit re-arm** (`POST /api/system/rearm`) is required to go back to `armed` — never automatic.
 - De-energizing a relay (`state: false`) is **always allowed**, whatever the state — only energizing (`state: true`) requires `armed`.
 - **Safety limits on `rebreath` AND `air`**: the firmware automatically cuts each of these two relays after a configurable duration — `rebreathCapMs` while `rebreath` is open, `airCapMs` while `air` is closed — (both **120s by default**, clamped between 5s and 300s) **whatever the source** of the command (REST, BLE, app). The two caps are **independent**: configuring one does not affect the other. The app should display these countdowns (`rebreathRemainingMs`, `airRemainingMs`) and warn the user before/at the automatic cut-off rather than let them believe the relay stays active indefinitely.
@@ -71,8 +74,9 @@ Every other route requires authentication.
 
 ### `GET /api/system/info` *(no auth)*
 ```json
-{ "firmware": "airbox-esp", "uptimeMs": 123456, "freeHeap": 180000, "chipModel": "ESP32-C3" }
+{ "firmware": "airbox-esp", "uptimeMs": 123456, "freeHeap": 180000, "chipModel": "ESP32-C3", "sequenceVersion": 1 }
 ```
+`sequenceVersion` (`1`) says this firmware can play sequences, see the "Sequences" section; it is missing on older firmware.
 The `apiKey` field is added **only** while the device is in fallback access-point mode (initial WiFi setup, see Authentication section):
 ```json
 { "firmware": "airbox-esp", "uptimeMs": 4210, "freeHeap": 182000, "chipModel": "ESP32-C3", "apiKey": "c7e90609ca27f7bfb3851aa8a60c6f02" }
@@ -234,6 +238,74 @@ Body: `{"line1": "Hello", "line2": "Short text", "durationMs": 3000}`. Displays 
 
 ---
 
+## Sequences
+
+See "Sequences: played on the Airbox" above for the rules. All routes need the API key.
+
+### Binary format of a sequence
+
+Little-endian. A sequence is a 12-byte header followed by 3 bytes per event.
+
+| Bytes | Content |
+|---|---|
+| 0-1 | magic `"AS"` (`0x41 0x53`) |
+| 2 | format version, `1` |
+| 3 | reserved, `0` |
+| 4-5 | event count (u16), at most **3000** |
+| 6-9 | total duration in seconds (u32), at most **65535**: when the sequence ends, possibly after the last event (a final wait) |
+| 10-11 | CRC-16/CCITT-FALSE (polynomial `0x1021`, initial value `0xFFFF`, no reflection, no final XOR) of bytes 0-9 followed by all the event bytes |
+| then, per event | `u16` time in seconds since the start, then `u8` = `(relay << 1) \| energized` |
+
+`relay`: `0` air, `1` rebreath, `2` aroma. `energized` is the coil state, like `state` in `relay.set` (Air energized = valve closed, Re-Breath energized = valve open, Aroma energized = running). Events must be sorted by time (events at the same time are applied in the order given) and no event may be after the total duration. Anything else is refused.
+
+Example, "Re-Breath and Aroma together for 20 s, then closed for 10 s" (24 bytes):
+```
+4153 01 00 0400 1e000000 940d  000003 000005 140002 140004
+```
+(events: Re-Breath on at 0 s, Aroma on at 0 s, Re-Breath off at 20 s, Aroma off at 20 s; total 30 s.)
+
+Time resolution is one second. The maximum size is 12 + 3 × 3000 = 9012 bytes.
+
+### `PUT /api/sequence`
+**Raw** body (`Content-Type: application/octet-stream`), the bytes above. Replaces any loaded sequence.
+```json
+{ "ok": true, "state": "loaded", "events": 4, "totalMs": 30000 }
+```
+Errors: `401` (key), `400` with a message (corrupt data, bad checksum, too many events, events out of order…), `409` if a sequence is running (stop it first).
+
+### `POST /api/sequence/start`
+Optional query parameter `holdMs`: how long the app may stay silent before the sequence is aborted (default `30000`, clamped to [5000, 600000]).
+```json
+{ "ok": true, "state": "running", "events": 4, "totalMs": 30000, "elapsedMs": 0, "holdMs": 30000 }
+```
+`409` with a message if nothing is loaded, if the system is not `armed` (`"refused: system not armed"`) or if a sequence is already running. Events at time 0 are applied immediately.
+
+### `POST /api/sequence/stop`
+Aborts the sequence and de-energizes all relays, staying `armed`. Always `{"ok": true}`, even when nothing is running. This is not the emergency stop: that one needs no key and also disarms the system.
+
+### `POST /api/sequence/keepalive`
+`{"ok": true}`. Any authenticated request counts as contact; this one exists for when the app has nothing else to send. During a run, send one every few seconds, well below `holdMs`.
+
+### `GET /api/sequence`
+```json
+{ "state": "running", "events": 4, "totalMs": 30000, "elapsedMs": 12000, "holdMs": 30000 }
+```
+`state` ∈ `"empty" | "loaded" | "running"`. `elapsedMs` and `holdMs` only while running. `error` appears when the last upload or start failed, or when the last sequence was aborted: the reason (for example `"no contact from the app"`, `"emergency stop"`, `"system disarmed"`, `"stopped by the app"`, `"a relay command was refused"`). It stays until the next upload or start.
+
+### Over BLE
+Same operations through `CMD`, with the key in the payload:
+```json
+{ "key": "<api_key>", "cmd": "sequence.upload", "offset": 0, "total": 24, "data": "<base64 of this piece>" }
+{ "key": "<api_key>", "cmd": "sequence.start", "holdMs": 30000 }
+{ "key": "<api_key>", "cmd": "sequence.stop" }
+{ "key": "<api_key>", "cmd": "sequence.keepalive" }
+```
+`sequence.upload`: send the sequence **in order**, in pieces of at most about **290 bytes** each (before base64; a BLE write holds at most 512 bytes). `offset` is the position of the piece in the whole sequence (the first piece has `0`), `total` the size of the whole sequence, identical in every piece. The last piece validates the whole sequence. There is no response: read `STATE.sequence` to see `"state": "loaded"`, or the `error`. A piece out of order cancels the upload (start again at `offset` 0).
+
+The same errors as over REST apply, reported in `STATE.sequence.error` (a refused `sequence.start` sets it too).
+
+---
+
 ## Real-time WebSocket
 
 `ws://airbox.local/ws?key=<api_key>` (the key is passed as a query parameter — browsers don't allow custom headers on the WebSocket upgrade).
@@ -254,7 +326,7 @@ Body: `{"line1": "Hello", "line2": "Short text", "durationMs": 3000}`. Displays 
   "event": "relay_changed"
 }
 ```
-`event` ∈ `"armed" | "disarmed" | "estop_triggered" | "rearmed" | "relay_changed" | "safety_cap_triggered"`. On `"safety_cap_triggered"`, check which of `rebreathRemainingMs`/`airRemainingMs` just dropped back to 0 to know which relay was cut automatically.
+`event` ∈ `"armed" | "disarmed" | "estop_triggered" | "rearmed" | "relay_changed" | "safety_cap_triggered" | "sequence_loaded" | "sequence_started" | "sequence_completed" | "sequence_aborted"`. While a sequence is loaded or running, or after one failed, the message also carries a `sequence` object (same fields as `GET /api/sequence`). On `"safety_cap_triggered"`, check which of `rebreathRemainingMs`/`airRemainingMs` just dropped back to 0 to know which relay was cut automatically.
 
 ---
 
@@ -283,6 +355,10 @@ JSON payload (UTF-8), `key` field mandatory:
 { "key": "<api_key>", "cmd": "wifi.scan" }
 { "key": "<api_key>", "cmd": "wifi.forget" }
 { "key": "<api_key>", "cmd": "system.language", "language": "fr" }
+{ "key": "<api_key>", "cmd": "sequence.upload", "offset": 0, "total": 24, "data": "<base64>" }
+{ "key": "<api_key>", "cmd": "sequence.start", "holdMs": 30000 }
+{ "key": "<api_key>", "cmd": "sequence.stop" }
+{ "key": "<api_key>", "cmd": "sequence.keepalive" }
 ```
 `wifi.scan` starts an asynchronous WiFi scan (works both in access-point mode and once connected); the result appears in `STATE` (`wifiScanning`, then `wifiNetworks`).
 
@@ -295,7 +371,7 @@ JSON payload (UTF-8), `key` field mandatory:
 **Important**: once `wifiNetworks` is present, the JSON often exceeds the max size of a BLE notification (~250 bytes, MTU limit) — the **notification** may then arrive truncated (silently, without error). After sending `wifi.scan`, don't rely on the notification: do an **explicit read** of `STATE` (`readValue()`, not `notify`) in a loop until you see `wifiScanning: false` — a read doesn't have this size limit.
 Any command with an invalid/missing key is silently ignored (no explicit error response in BLE v1 — watch `STATE` to confirm the effect).
 
-No `script.*` commands: automations are handled by the app, see "Automations/sequences: the app's responsibility" at the top of this document.
+The `sequence.*` commands are described in the "Sequences" section.
 
 ### Writing to `ESTOP`
 Any value written triggers the emergency stop immediately, without key verification.
@@ -310,6 +386,7 @@ Notified automatically on every change (armed/disarmed/estop/relay/cap triggered
 ```json
 {
   "state": "armed",
+  "sequenceVersion": 1,
   "rebreathRemainingMs": 0,
   "airRemainingMs": 0,
   "apiKey": "c7e90609ca27f7bfb3851aa8a60c6f02",
@@ -322,6 +399,8 @@ Notified automatically on every change (armed/disarmed/estop/relay/cap triggered
   "wifiNetworks": [{ "ssid": "HomeWifi-XXXX", "rssi": -52 }, { "ssid": "Neighbor-YYYY", "rssi": -78 }]
 }
 ```
+`sequenceVersion` is always present on firmware that can play sequences (see the "Sequences" section); it is missing on older firmware. A `sequence` object `{ "state", "events", "totalMs", "elapsedMs", "holdMs", "error" }` (same as `GET /api/sequence`) appears while a sequence is loaded or running, and after one failed. If the whole JSON would exceed 480 bytes, `wifiNetworks` is left out of that update to stay under the 512-byte limit.
+
 The `apiKey` field is always present here (see Authentication section for why no key is required on this characteristic). `language` reflects the language currently displayed on the screen (`"en"`/`"fr"`, see `GET/PUT /api/system/language`). `wifiNetworks` only appears once a scan has completed (triggered via `cmd: "wifi.scan"`), limited to `{ssid, rssi}` for the 4 strongest networks — a BLE characteristic has a hard 512-byte limit on its value; the full list (up to 10, with security and "connected" flag) is only available over REST (`GET /api/wifi/scan`).
 
 ---
@@ -344,4 +423,4 @@ The device advertises itself over mDNS as `airbox.local`, but mDNS support diffe
 3. If the user chooses to configure WiFi: write `WIFI_CONFIG` over BLE with the key retrieved in step 1, or connect to the `Airbox-XXXXXX` SoftAP (shown on the screen, with a QR code to join it directly) and use `POST /api/wifi/config` (the key can also be retrieved via `GET /api/system/info` while on this setup access point).
 4. Once WiFi is up, switch to REST/WebSocket (more reliable/faster than BLE for continuous control) — retrieve and store the actual IP via `GET /api/wifi/status` (see "Device discovery" above, especially on Android).
 5. Display the safety state at all times, disable relay controls until `armed` is reached, and always expose a clearly visible "EMERGENCY STOP" button that calls `POST /api/system/estop` (no need to worry about the API key).
-6. For continuous control (live relays, app-driven sequences), prefer the WebSocket (`/ws`) to receive updates without polling the API in a loop — REST/BLE remain used to send commands.
+6. For continuous control (live relays), prefer the WebSocket (`/ws`) to receive updates without polling the API in a loop — REST/BLE remain used to send commands.

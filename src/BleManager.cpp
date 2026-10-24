@@ -1,5 +1,6 @@
 #include "BleManager.h"
 #include "Config.h"
+#include <mbedtls/base64.h>
 
 namespace {
 BleManager* g_manager = nullptr;
@@ -40,11 +41,12 @@ static AirboxEstopCallbacks g_estopCallbacks;
 static AirboxWifiConfigCallbacks g_wifiConfigCallbacks;
 
 void BleManager::begin(SafetyManager& safety, StorageManager& storage, NetworkManager& network,
-                        DisplayManager& display) {
+                        DisplayManager& display, SequenceEngine& sequences) {
   safety_ = &safety;
   storage_ = &storage;
   network_ = &network;
   display_ = &display;
+  sequences_ = &sequences;
   g_manager = this;
 
   NimBLEDevice::init("Airbox");
@@ -86,6 +88,7 @@ void BleManager::begin(SafetyManager& safety, StorageManager& storage, NetworkMa
   // Reacts to safety changes by pushing the updated state right away
   // (armed/disarmed/estop/relays changed/cap reached).
   safety_->onEvent([this](const SafetyEvent&) { notifyStateChange(); });
+  sequences_->onNotice([this](seq::Notice, const char*) { notifyStateChange(); });
 }
 
 bool BleManager::checkKey(const JsonDocument& doc) const {
@@ -96,6 +99,7 @@ bool BleManager::checkKey(const JsonDocument& doc) const {
 String BleManager::buildStateJson() const {
   JsonDocument doc;
   doc["state"] = safety_->getStateName();
+  doc["sequenceVersion"] = 1;  // lets the app know this firmware can play sequences (see API.md)
   doc["rebreathRemainingMs"] = safety_->getRebreathRemainingMs();
   doc["airRemainingMs"] = safety_->getAirRemainingMs();
   if (display_) doc["language"] = languageCode(display_->getLanguage());
@@ -117,6 +121,10 @@ String BleManager::buildStateJson() const {
   JsonObject aroma = doc["aroma"].to<JsonObject>();
   RelayLogicalState ar = relays.getLogicalState(RelayId::Aroma);
   aroma["running"] = ar.logicalOn;
+
+  // Present only while a sequence is loaded/running, or to report why the last one failed.
+  JsonObject sequence = doc["sequence"].to<JsonObject>();
+  if (!sequences_->describe(sequence)) doc.remove("sequence");
 
   doc["wifiConnected"] = network_->isConnected();
   doc["wifiScanning"] = network_->isScanning();
@@ -141,6 +149,14 @@ String BleManager::buildStateJson() const {
 
   String out;
   serializeJson(doc, out);
+  // The STATE characteristic cannot hold more than 512 bytes (see CLAUDE.md).
+  // The Wi-Fi scan list is the only part that is both large and optional:
+  // drop it rather than lose the whole update.
+  if (out.length() > 480 && !doc["wifiNetworks"].isNull()) {
+    doc.remove("wifiNetworks");
+    out = "";
+    serializeJson(doc, out);
+  }
   return out;
 }
 
@@ -166,6 +182,7 @@ void BleManager::handleCmd(const String& raw) {
   JsonDocument doc;
   if (deserializeJson(doc, raw)) return;
   if (!checkKey(doc)) return;
+  sequences_->touch();  // any authenticated command shows the app is still there
 
   const char* cmd = doc["cmd"] | "";
 
@@ -201,6 +218,24 @@ void BleManager::handleCmd(const String& raw) {
       uint32_t durationMs = doc["durationMs"] | 3000;
       display_->showTemporaryText(line1, line2, durationMs);
     }
+  } else if (strcmp(cmd, "sequence.upload") == 0) {
+    // {"offset": 0, "total": 24, "data": "<base64 piece>"} — pieces in order, at most ~290 bytes each.
+    // The result (loaded / error) is reported in STATE.sequence.
+    const char* b64 = doc["data"] | "";
+    uint8_t piece[320];
+    size_t pieceLen = 0;
+    String error;
+    if (mbedtls_base64_decode(piece, sizeof(piece), &pieceLen, reinterpret_cast<const unsigned char*>(b64),
+                              strlen(b64)) == 0) {
+      sequences_->upload(doc["offset"] | 0, doc["total"] | 0, piece, pieceLen, error);
+    }
+  } else if (strcmp(cmd, "sequence.start") == 0) {
+    String error;
+    sequences_->start(doc["holdMs"] | seq::kHoldDefaultMs, error);
+  } else if (strcmp(cmd, "sequence.stop") == 0) {
+    sequences_->stop("stopped by the app");
+  } else if (strcmp(cmd, "sequence.keepalive") == 0) {
+    // Nothing more to do: the authenticated command itself counted as contact.
   } else if (strcmp(cmd, "wifi.scan") == 0) {
     network_->requestScan();  // result visible in the next STATE reads
   } else if (strcmp(cmd, "wifi.forget") == 0) {

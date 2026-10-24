@@ -16,16 +16,35 @@ This is **not** a home-automation project. The firmware drives 3 relays of a 4-r
 
 **Absolute documentation rule**: `API.md` is **self-contained** and will be distributed as-is (without this file) to the iOS/Android mobile app developer. Any change touching a REST route, a WebSocket message, or a BLE characteristic/command **must be reflected in `API.md` in the same session** — never let that doc drift from the actual firmware.
 
-## Automation architecture: app-side, not embedded
+## Sequences: played on the Airbox
 
-**Decision made on 17/08/2026, after explicitly connecting it to the original request.** The very first need the user expressed was: *"automations loaded directly onto the board to avoid interruptions in case of a brief drop-out with the smartphone"*. An embedded script engine (`AutomationEngine`) was built for this, tested and working — then removed at the user's explicit request, with full knowledge of the trade-off:
+**Decision of 24/10/2026, reversing the decision of 17/08/2026.** The very first need the user expressed was *"automations loaded directly onto the board to avoid interruptions in case of a brief drop-out with the smartphone"*. An embedded script engine (`AutomationEngine`) was built then removed on 17/08/2026 to keep the firmware light, with the user accepting that a phone drop-out would stop an app-driven sequence. In practice the user found that trade-off worth reversing, so sequences are played by the firmware again — **in a much simpler form** (the old engine's code is not in this repository's history; nothing to recover, and none needed).
 
-- **Why removed**: simpler, lighter firmware (no instruction VM, no LittleFS storage, no DSL to maintain). The user considers brief drop-outs rare enough in real use to accept the trade-off.
-- **What we lose**: if the phone loses its connection (BLE/WiFi) while a sequence is running on the app side, the sequence stops immediately (no more commands arrive) — not only on an actual power cut. The app must handle this (warn the user, never assume a relay remains in the intended state after a drop-out).
-- **What does NOT change**: `SafetyManager` remains the sole gatekeeper. A relay still cannot be energized outside `ARMED`, and ESTOP/disarm still force the safe state immediately, whatever the source of the command (app, REST, BLE). The baseline safety guarantee is intact — only the guarantee of *completing a multi-step sequence* is dropped.
-- **Practical consequence**: "automations" are now the responsibility of the application (phone), which chains already-existing atomic commands (`relay.set`/`toggle`, app-side `wait`, etc.) while driving the firmware live. No "script" route/command exists in the firmware anymore.
+### Design (and why it is simple)
 
-**If this choice is reconsidered later** (e.g. the user finds brief drop-outs are a real problem in practice), see the git history of this file and of `src/` before 17/08/2026 to recover `AutomationEngine` (flat-instruction VM, JSON DSL, `manual`/`on_arm`/`interval` triggers, LittleFS storage) — it was complete and working, not just sketched.
+- **No script, no interpreter.** The app unrolls the sequence (loops expanded, random waits drawn) into a flat, time-sorted list of `{seconds, relay, energized}` events and sends it. The firmware only applies events when their time comes. Format: `src/SequenceTimeline.h` (binary, CRC-protected, ≤ 3000 events / 9012 bytes), documented in `API.md` ("Sequences").
+- **RAM only.** One 9 KB buffer in `SequenceTimeline`. Nothing is written to flash or NVS: a reboot forgets any sequence and the system comes back `DISARMED` (explicit user choice). No LittleFS.
+- **`SequenceCore.h`** (plain C++, injected clock and relay access) holds the whole state machine: upload, start, playback, completion, abort. It is unit-tested on a computer: `./test/host/run.sh` (needs only `g++`). **Run it after any change to `SequenceTimeline.h` / `SequenceCore.h`.**
+- **`SequenceEngine`** (`src/SequenceEngine.h/.cpp`) is the thin Arduino-side wrapper: wires the core to `millis()` and to `SafetyManager::setRelay()`, takes a recursive mutex (REST async tasks, BLE callbacks and `loop()` all reach it). `sequences.tick()` runs on every `loop()` right after `safety.tick()`, non-blocking like everything else.
+
+### Safety rules (do not weaken)
+
+- **Every relay change goes through `SafetyManager::setRelay()`**, so the `ARMED` requirement and the Re-Breath / Air caps keep applying exactly as for a manual command. If `setRelay` ever refuses, the sequence aborts and de-energizes everything.
+- A sequence **starts only when `ARMED`**. It cannot arm the system.
+- It **always ends with all 3 relays de-energized** (completion, stop, abort).
+- **ESTOP and disarm end the sequence** (the engine listens to the `SafetyManager` events; `SafetyManager` has already forced the safe state).
+- **Dead-man timer**: if no authenticated request / BLE command arrives for `holdMs` (default 30 s, clamped to [5 s, 10 min], set by the app in `start`), the sequence is aborted. Every authenticated call counts as contact (`WebApi::authOk()`, `BleManager::handleCmd()`), and the app sends a keepalive every few seconds. This keeps short drop-outs harmless without leaving a sequence running forever after a real loss of contact. **The timer cannot be disabled** (explicit choice: "continue, but stop after a delay without contact").
+- **De-energizing stays always allowed**: `sequence.stop` needs the API key but no state check. The unauthenticated brake remains ESTOP.
+- The caps still win: a sequence cannot keep Re-Breath open or Air closed beyond the cap, and a cap cutting a relay does not abort the sequence (its later events just apply).
+
+### What the app must do
+
+See `API.md`, "Sequences: played on the Airbox". Firmware that cannot play sequences does not report `sequenceVersion` (in `GET /api/system/info` and in the BLE `STATE`): the app then drives the relays itself, one command at a time, as before.
+
+### Not done (ideas)
+
+- The OLED shows nothing specific while a sequence runs (the status screen with the relay states and cap bars stays, which is what matters). A small "SEQ mm:ss" indicator could go in `DisplayManager::renderStatus()`.
+- Sequences cannot be stored on the Airbox or started from its button; that would need flash storage and an interpreter (loops, random waits) on the device.
 
 ## Hardware & pinout (Seeed XIAO ESP32-C3)
 
@@ -99,6 +118,9 @@ src/
   SafetyManager.h/.cpp     THE safety gatekeeper (see previous section)
   DisplayManager.h/.cpp    1.3" I2C OLED SH1106 (U8g2 lib) — AUTOMATIC screen selection by fixed priority (see "Display model" below), connection QR code (QRCode lib)
   StorageManager.h/.cpp    Preferences/NVS only (WiFi, API key, Re-Breath cap) — no file storage
+  SequenceTimeline.h       sequence binary format (plain C++, host-testable)
+  SequenceCore.h           sequence state machine (plain C++, host-testable: test/host/)
+  SequenceEngine.h/.cpp    Arduino wrapper: millis() + SafetyManager, mutex
   NetworkManager.h/.cpp    WiFi STA (NVS credentials) + SoftAP fallback on failure/absence, mDNS "airbox.local", async WiFi scan
   BleManager.h/.cpp        NimBLE, custom "Airbox Control" service (see API.md for UUIDs)
   WebApi.h/.cpp            ESPAsyncWebServer + WebSocket, all REST routes (see API.md)
@@ -115,7 +137,7 @@ The screen **automatically** chooses what to display, by fixed priority order (t
 5. **Connection QR code** — access-point mode (`apMode_`) AND no BLE client connected: QR code in `WIFI:T:nopass;S:<ssid>;;` format (the SoftAP is open, no password) to join the fallback access point directly from the phone's camera, + SSID as text next to it.
 6. **Boot/connecting** — default screen during an ongoing WiFi connection attempt (neither connected nor yet switched to AP, see `NetworkManager::isConnectingSta()`).
 
-All the selection logic is in `DisplayManager::render()` — it's the only place to modify to change priorities. No "script running" screen: sequences live on the app side (see "Automation architecture" at the top of this file).
+All the selection logic is in `DisplayManager::render()` — it's the only place to modify to change priorities. No dedicated "sequence running" screen: the status screen keeps showing the relays and cap bars while a sequence plays (see "Sequences: played on the Airbox").
 
 ### QR code
 
@@ -168,7 +190,7 @@ If a valid-but-buggy image is nevertheless flashed successfully and boot-loops o
 - **NimBLE-Arduino** rather than Arduino-ESP32's historical BLE stack: much smaller RAM footprint, needed to run WiFi + async web server + BLE simultaneously on an ESP32-C3 (single core, limited RAM). RAM usage measured with the whole firmware assembled (OLED+QR included, without AutomationEngine/LittleFS): ~17% (55 KB / 320 KB).
 - **ESPAsyncWebServer / AsyncTCP (`ESP32Async/*` forks)**: actively maintained forks, compatible with the Arduino-ESP32 3.x core used here.
 - **No hardware RTC** (user decision): no firmware feature depends on absolute time.
-- **Preferences/NVS only** for persistence (WiFi, API key, Re-Breath cap, Air cap, language) — no LittleFS/file storage: automations live on the app side, see "Automation architecture" at the top of this file.
+- **Preferences/NVS only** for persistence (WiFi, API key, Re-Breath cap, Air cap, language) — no LittleFS/file storage: a sequence only lives in RAM, see "Sequences: played on the Airbox".
 - **`min_spiffs.csv` partition** (`platformio.ini`): two OTA application slots (`ota_0`/`ota_1`, ~1.875 MB each) + minimal `spiffs` (128 KB, unused — no LittleFS/SPIFFS). Flash used: ~71% (1.39 MB / 1.875 MB per slot). See the "OTA" section above for the decision and its history (`no_ota.csv` used until 18/08/2026).
 - **API key randomly generated on first boot** (`StorageManager::getApiKey()`). Every REST/BLE control route requires it, except `POST /api/system/estop` / BLE `ESTOP` characteristic (see "Why ESTOP is not authenticated" above). **Three ways to retrieve it** (so as not to depend on a cable/serial monitor):
   1. **OLED screen**: API key "peek" page, reached with a short press on the BOOT button (2 presses: network then API key), returns to the normal screen on its own after a few seconds. Requires physical access to the device.
@@ -218,7 +240,7 @@ A second limit to know, different from the notification one: a NimBLE characteri
 ## Known limitations / future improvement ideas
 
 - No physical cut-off of the relay power supply independent of the firmware — safety relies entirely on firmware + watchdog. **Adding a hardware emergency-stop button that cuts relay power independently of the ESP32 would be the best possible safety improvement** (discussed with the user, declined for now).
-- **No embedded automations** (settled decision, see "Automation architecture" at the top of this file): an app-driven sequence stops if the phone loses the connection midway.
+- Sequences are RAM-only and cannot be started without the app (see "Sequences: played on the Airbox").
 - No reliable absolute time (no RTC).
 - The AP captive portal (fallback SoftAP) has no DNS redirection to force a config page to open automatically on the phone — `DNSServer` already redirects everything to the AP's IP, but there is no basic HTML provisioning page served by `WebApi` in AP mode yet (provisioning is currently done via the REST API or BLE).
 - **The OLED screen (SH1106) has still not been visually confirmed on the real hardware** at the time of writing — the physical hardware has not yet been re-wired (LCD1602 → OLED, VCC 5V → 3.3V) since the component change. It compiles and flashes without errors, but must be checked at power-up: I2C address detected (serial log at boot), VCC voltage, readability of each screen (status, QR scanned with a phone, peek, ESTOP).

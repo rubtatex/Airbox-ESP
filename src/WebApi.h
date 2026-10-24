@@ -20,11 +20,12 @@
 #include "StorageManager.h"
 #include "NetworkManager.h"
 #include "DisplayManager.h"
+#include "SequenceEngine.h"
 
 class WebApi {
  public:
   void begin(SafetyManager& safety, StorageManager& storage, NetworkManager& network,
-             DisplayManager& display);
+             DisplayManager& display, SequenceEngine& sequences);
 
   // Call on every loop(): cleans up dead WS clients, pushes periodic
   // updates (Re-Breath countdown, etc.).
@@ -36,6 +37,7 @@ class WebApi {
   NetworkManager* network_ = nullptr;
   uint32_t lastSeenWifiScanGen_ = 0;  // generation tracking for /api/wifi/scan
   DisplayManager* display_ = nullptr;
+  SequenceEngine* sequences_ = nullptr;
 
   AsyncWebServer server_{80};
   AsyncWebSocket ws_{"/ws"};

@@ -3,9 +3,8 @@
 // =============================================================================
 // StorageManager — non-volatile persistence (Preferences/NVS only).
 //
-// Automations/sequences live on the app side (phone), not on the ESP32 —
-// see .claude/CLAUDE.md. This module therefore only stores small data:
-// WiFi config, API key, safety config (Re-Breath cap).
+// Sequences are kept in RAM only (see SequenceEngine, .claude/CLAUDE.md) — this
+// module only stores small data: WiFi config, API key, safety config, language.
 // =============================================================================
 
 #include <Arduino.h>
