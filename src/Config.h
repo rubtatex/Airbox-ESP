@@ -1,5 +1,11 @@
 #pragma once
 
+// Firmware version, as reported by GET /api/system/info ("version"). Release builds set it from the
+// git tag (see .github/workflows/release.yml); a local build reports "dev".
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "dev"
+#endif
+
 // =============================================================================
 // Airbox-ESP — hardware configuration and global constants
 //

@@ -175,6 +175,10 @@ The file was named `UiStrings.h`/`.cpp` and **never** `Strings.h`/`.cpp`. A firs
 - At the end: `Update.end(true)` validates the image (checksum/magic byte). Success → `{"ok":true}` then `ESP.restart()` (like `reboot`/`factory-reset`, same conventions). Failure (`begin`/`write`/`end`) → 400 with `Update.errorString()`, the current firmware keeps running normally, nothing is applied.
 - During the upload, the screen shows "Updating firmware / Do not power off" (`display.text`, 60s) — "temporary text" priority, see "Display model".
 
+### Releases and in-app update
+
+**Decision of 24/10/2026.** The repository is public; the iOS app checks the latest GitHub release (`https://api.github.com/repos/rubtatex/Airbox-ESP/releases/latest`, unauthenticated, pre-releases ignored) and offers to install it through the existing `POST /api/system/ota`. Pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`: host tests, `pio run` with `-DFIRMWARE_VERSION="X.Y.Z"` (`Config.h` defaults to `"dev"`), size check against the 1,966,080-byte slot, then a release with `airbox-esp-X.Y.Z.bin` + `.sha256`. `GET /api/system/info` returns `version` (documented in `API.md`). **Asset names are a contract with the app** (it looks for `*.bin` and the matching `.bin.sha256`): do not rename them. Nothing is signed; the SHA-256 only detects a corrupted download. Release notes shown in the app are the GitHub release body.
+
 ### Why it fails safe even with a bad image
 
 The currently running firmware (slot A) is never modified while the new image is written to the inactive slot (slot B) — an interrupted upload (WiFi dropped, network error) simply leaves slot B incomplete/invalid, without touching slot A which keeps working. `otadata` (the "which slot to boot" pointer) is only updated **after** a successful `Update.end(true)`.
