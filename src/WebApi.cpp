@@ -23,14 +23,22 @@ struct OtaUploadState {
   bool started = false;  // Update.begin() succeeded
   String error;          // non-empty = failure (begin/write/end), already resolved
 };
+
+// State accumulated while a sequence is uploaded (PUT /api/sequence), attached
+// to AsyncWebServerRequest::_tempObject like OtaUploadState.
+struct SequenceUploadState {
+  bool authOk = false;
+  String error;  // non-empty = failure
+};
 }  // namespace
 
 void WebApi::begin(SafetyManager& safety, StorageManager& storage, NetworkManager& network,
-                    DisplayManager& display) {
+                    DisplayManager& display, SequenceEngine& sequences) {
   safety_ = &safety;
   storage_ = &storage;
   network_ = &network;
   display_ = &display;
+  sequences_ = &sequences;
 
   // CORS: only so that test tools (web page served from another origin,
   // e.g. test-app/) can call the API with fetch().
@@ -57,6 +65,15 @@ void WebApi::begin(SafetyManager& safety, StorageManager& storage, NetworkManage
       case SafetyEvent::Type::SafetyCapTriggered: broadcastStatus("safety_cap_triggered"); break;
     }
   });
+
+  sequences_->onNotice([this](seq::Notice notice, const char*) {
+    switch (notice) {
+      case seq::Notice::Loaded: broadcastStatus("sequence_loaded"); break;
+      case seq::Notice::Started: broadcastStatus("sequence_started"); break;
+      case seq::Notice::Completed: broadcastStatus("sequence_completed"); break;
+      case seq::Notice::Aborted: broadcastStatus("sequence_aborted"); break;
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +83,9 @@ void WebApi::begin(SafetyManager& safety, StorageManager& storage, NetworkManage
 bool WebApi::authOk(AsyncWebServerRequest* request) const {
   if (!request->hasHeader("X-Api-Key")) return false;
   String key = request->header("X-Api-Key");
-  return storage_->getApiKey().equals(key);
+  if (!storage_->getApiKey().equals(key)) return false;
+  sequences_->touch();  // any authenticated request shows the app is still there
+  return true;
 }
 
 void WebApi::sendError(AsyncWebServerRequest* request, int code, const String& message) const {
@@ -153,6 +172,9 @@ String WebApi::buildStatusJson() const {
   doc["wifiConnected"] = network_->isConnected();
   doc["apMode"] = network_->isApMode();
   doc["ip"] = network_->getIp();
+  // Present only while a sequence is loaded/running, or to report why the last one failed.
+  JsonObject sequence = doc["sequence"].to<JsonObject>();
+  if (!sequences_->describe(sequence)) doc.remove("sequence");
   String out;
   serializeJson(doc, out);
   return out;
@@ -204,6 +226,7 @@ void WebApi::setupRoutes() {
     doc["uptimeMs"] = millis();
     doc["freeHeap"] = ESP.getFreeHeap();
     doc["chipModel"] = ESP.getChipModel();
+    doc["sequenceVersion"] = 1;  // lets the app know this firmware can play sequences (see API.md)
     // The API key is exposed without authentication ONLY during the physical
     // pairing window (the device broadcasts its own fallback access point,
     // separate from the normal WiFi) — never once on the usual WiFi
@@ -487,6 +510,83 @@ void WebApi::setupRoutes() {
                if (!applied) out["error"] = "refused: system not armed (arm the system first)";
                sendJson(request, out);
              });
+
+  // --- Sequences ------------------------------------------------------------
+  // The app sends a sequence already unrolled (see SequenceTimeline.h for the
+  // binary format), then starts it. It is played on the Airbox, so a brief loss
+  // of the phone's connection does not interrupt it. See API.md.
+  server_.on("/api/sequence", HTTP_GET, [this](AsyncWebServerRequest* request) {
+    if (!authOk(request)) return sendError(request, 401, "invalid or missing X-Api-Key");
+    JsonDocument doc;
+    JsonObject sequence = doc.to<JsonObject>();
+    if (!sequences_->describe(sequence)) sequence["state"] = "empty";
+    sendJson(request, doc);
+  });
+
+  // RAW body (Content-Type: application/octet-stream), like OTA.
+  server_.on(
+      "/api/sequence", HTTP_PUT,
+      [this](AsyncWebServerRequest* request) {
+        if (request->contentLength() == 0) {
+          if (!authOk(request)) return sendError(request, 401, "invalid or missing X-Api-Key");
+          sendError(request, 400, "empty body");
+        }
+      },
+      nullptr,
+      [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+        auto* st = reinterpret_cast<SequenceUploadState*>(request->_tempObject);
+        if (index == 0) {
+          st = new SequenceUploadState();
+          request->_tempObject = st;
+          st->authOk = authOk(request);
+        }
+        if (st->authOk && st->error.isEmpty()) {
+          sequences_->upload(index, total, data, len, st->error);
+        }
+        if (index + len != total) return;  // not the last chunk yet
+
+        if (!st->authOk) {
+          sendError(request, 401, "invalid or missing X-Api-Key");
+        } else if (!st->error.isEmpty()) {
+          sendError(request, sequences_->state() == seq::State::Running ? 409 : 400, st->error);
+        } else {
+          JsonDocument out;
+          out["ok"] = true;
+          sequences_->describe(out.to<JsonObject>());
+          sendJson(request, out);
+        }
+        delete st;
+        request->_tempObject = nullptr;
+      });
+
+  // Optional query parameter: holdMs = how long the app may stay silent before
+  // the sequence is aborted (default 30000, clamped to [5000, 600000]).
+  server_.on("/api/sequence/start", HTTP_POST, [this](AsyncWebServerRequest* request) {
+    if (!authOk(request)) return sendError(request, 401, "invalid or missing X-Api-Key");
+    uint32_t holdMs = seq::kHoldDefaultMs;
+    if (request->hasParam("holdMs")) holdMs = request->getParam("holdMs")->value().toInt();
+    String error;
+    if (!sequences_->start(holdMs, error)) return sendError(request, 409, error);
+    JsonDocument out;
+    out["ok"] = true;
+    sequences_->describe(out.to<JsonObject>());
+    sendJson(request, out);
+  });
+
+  // De-energizing is always allowed, so this needs no state check. Not the
+  // emergency stop (which needs no key and also disarms the system).
+  server_.on("/api/sequence/stop", HTTP_POST, [this](AsyncWebServerRequest* request) {
+    if (!authOk(request)) return sendError(request, 401, "invalid or missing X-Api-Key");
+    sequences_->stop("stopped by the app");
+    request->send(200, "application/json", "{\"ok\":true}");
+  });
+
+  // Authenticating is what counts as contact: this route only exists so an app
+  // that has nothing else to send can say it is still there.
+  server_.on("/api/sequence/keepalive", HTTP_POST, [this](AsyncWebServerRequest* request) {
+    if (!authOk(request)) return sendError(request, 401, "invalid or missing X-Api-Key");
+    request->send(200, "application/json", "{\"ok\":true}");
+  });
 
   // --- Display --------------------------------------------------------------
   server_.on(

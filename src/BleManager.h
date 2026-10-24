@@ -23,11 +23,12 @@
 #include "StorageManager.h"
 #include "NetworkManager.h"
 #include "DisplayManager.h"
+#include "SequenceEngine.h"
 
 class BleManager {
  public:
   void begin(SafetyManager& safety, StorageManager& storage, NetworkManager& network,
-             DisplayManager& display);
+             DisplayManager& display, SequenceEngine& sequences);
 
   // Call on every loop(): pushes a STATE notification if the state has
   // changed since last time (throttled).
@@ -43,6 +44,7 @@ class BleManager {
   StorageManager* storage_ = nullptr;
   NetworkManager* network_ = nullptr;
   DisplayManager* display_ = nullptr;
+  SequenceEngine* sequences_ = nullptr;
 
   NimBLEServer* server_ = nullptr;
   NimBLECharacteristic* chrCmd_ = nullptr;

@@ -14,6 +14,7 @@ Firmware for a small breath-control device. It runs on a **Seeed XIAO ESP32-C3**
 - **Hard time caps** on Re-Breath open and Air closed (default 120 s, configurable 5–300 s each). The firmware enforces them whatever the command source.
 - **Hardware watchdog**: the main loop never blocks; if it hangs, the chip resets into the safe state.
 - **REST API + WebSocket** (live state push) over Wi-Fi, with a per-device API key.
+- **Sequences played on the device**: the app sends a sequence (relay events with times), then starts it; it keeps running through a brief phone drop-out. It starts only when armed, goes through the same safety gate and caps, ends with every relay off, and is aborted if the app stays silent for too long.
 - **BLE GATT service** with the same controls, so it works with no Wi-Fi at all.
 - **Wi-Fi provisioning**: the device falls back to an open access point (`Airbox-XXXXXX`) and shows a QR code to join it. You can configure Wi-Fi over REST or BLE.
 - **OTA firmware updates** over Wi-Fi (only while disarmed).
@@ -52,6 +53,14 @@ pio device monitor      # serial monitor, 115200 baud (prints the API key at boo
 
 PlatformIO installs the dependencies listed in [platformio.ini](platformio.ini): U8g2, QRCode, ArduinoJson, NimBLE-Arduino, ESPAsyncWebServer and AsyncTCP (ESP32Async forks).
 
+## Tests
+
+The sequence format and state machine are plain C++ and have host-side tests (no board needed, only `g++`):
+
+```sh
+./test/host/run.sh
+```
+
 ## First setup
 
 1. Power the device. It starts `DISARMED`.
@@ -75,13 +84,14 @@ PlatformIO installs the dependencies listed in [platformio.ini](platformio.ini):
 - **De-energizing is always allowed**; energizing requires `ARMED`.
 - **ESTOP** forces all relays off immediately. Leaving it requires an explicit re-arm.
 - **Time caps** cut Re-Breath (open) and Air (closed) automatically, and never re-open them on their own.
+- **Sequences** only start when armed, change relays through the same gatekeeper (so the caps apply), end with all relays off, stop on ESTOP or disarm, and abort when the app goes silent.
 - **Watchdog** (~4 s): a firmware hang resets the chip into the safe, disarmed state.
 - **OTA is refused unless disarmed**. A failed or interrupted upload never touches the running firmware.
 
 ## Known limitations
 
 - **No independent hardware kill switch.** Safety relies on the firmware, the watchdog and the NO/NC valve mechanics. A physical emergency stop that cuts relay power independently of the ESP32 would be the most valuable addition.
-- **Sequences run on the app side.** The firmware runs no multi-step automations. If the phone loses its connection mid-sequence, the sequence stops; the safety caps still apply.
+- **Sequences live in RAM and need the app to start.** A reboot forgets them, and they cannot be started from the device. If the app stays silent for longer than the hold time (30 s by default), the sequence is aborted with every relay off; the safety caps apply throughout.
 - **The OLED display path has not yet been verified on real hardware.** It builds and flashes, but has not been checked on a wired unit.
 - Relay polarity (active LOW) and the relay board's pull-ups must be checked on your own hardware before use.
 - No real-time clock; nothing depends on absolute time.

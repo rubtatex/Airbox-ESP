@@ -7,6 +7,7 @@
 #include "StorageManager.h"
 #include "NetworkManager.h"
 #include "BleManager.h"
+#include "SequenceEngine.h"
 #include "WebApi.h"
 
 RelayController relayController;
@@ -15,6 +16,7 @@ DisplayManager display;
 StorageManager storage;
 NetworkManager network;
 BleManager ble;
+SequenceEngine sequences;
 WebApi webApi;
 
 void setup() {
@@ -31,12 +33,13 @@ void setup() {
   storage.begin();
   display.setLanguage(storage.getLanguage());  // before begin() so the initial splash is already in the right language
   display.begin();
+  sequences.begin(safety);
   safety.onShortPress([]() { display.onShortPress(); });
   safety.setRebreathCapMs(storage.getRebreathCapMs());
   safety.setAirCapMs(storage.getAirCapMs());
   network.begin(storage);
-  ble.begin(safety, storage, network, display);
-  webApi.begin(safety, storage, network, display);
+  ble.begin(safety, storage, network, display, sequences);
+  webApi.begin(safety, storage, network, display, sequences);
 
   display.setApiKey(storage.getApiKey());
 
@@ -46,6 +49,7 @@ void setup() {
 
 void loop() {
   safety.tick();
+  sequences.tick();
   network.tick();
   ble.tick();
   webApi.tick();

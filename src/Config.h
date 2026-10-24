@@ -77,6 +77,5 @@ static constexpr const char* BLE_CHAR_STATE_UUID        = "9b1a0003-8f1a-4a2b-9c
 static constexpr const char* BLE_CHAR_ESTOP_UUID        = "9b1a0004-8f1a-4a2b-9c3e-1a2b3c4d5e6f"; // write: immediate emergency stop
 static constexpr const char* BLE_CHAR_WIFI_CONFIG_UUID  = "9b1a0005-8f1a-4a2b-9c3e-1a2b3c4d5e6f"; // write: WiFi provisioning
 
-// Note: no embedded automations/sequences — they live on the app side
-// (phone), which drives the firmware one command at a time.
-// See .claude/CLAUDE.md, section "Automation architecture: app-side, not embedded".
+// Note: sequences are played by SequenceEngine, from a flat event list the app
+// sends (RAM only). See .claude/CLAUDE.md, section "Sequences: played on the Airbox".
