@@ -9,6 +9,7 @@
 #include "BleManager.h"
 #include "SequenceEngine.h"
 #include "WebApi.h"
+#include "SerialInfo.h"
 
 RelayController relayController;
 SafetyManager safety;
@@ -18,6 +19,7 @@ NetworkManager network;
 BleManager ble;
 SequenceEngine sequences;
 WebApi webApi;
+SerialInfo serialInfo;
 
 void setup() {
   Serial.begin(115200);
@@ -40,6 +42,7 @@ void setup() {
   network.begin(storage);
   ble.begin(safety, storage, network, display, sequences);
   webApi.begin(safety, storage, network, display, sequences);
+  serialInfo.begin(network, ble);
 
   display.setApiKey(storage.getApiKey());
 
@@ -53,6 +56,7 @@ void loop() {
   network.tick();
   ble.tick();
   webApi.tick();
+  serialInfo.tick();
 
   display.setSafetyState(safety.getState(), safety.getRebreathRemainingMs(), safety.getRebreathCapMs(),
                           safety.getAirRemainingMs(), safety.getAirCapMs());

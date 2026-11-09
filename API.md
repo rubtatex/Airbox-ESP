@@ -307,6 +307,23 @@ The same errors as over REST apply, reported in `STATE.sequence.error` (a refuse
 
 ---
 
+## USB diagnostic (serial port)
+
+A read-only status line over the USB serial port (115200 baud), used by the USB installer page. It is not part of the app's normal flow: it needs the device plugged into a computer.
+
+Send the text line `airbox.info` (ending with a newline). The Airbox answers one line made of `AIRBOX ` followed by a JSON object:
+
+```
+AIRBOX {"firmware":"airbox-esp","version":"1.0.4","uptimeMs":734210,"resetReason":"power-on","slot":"ota_0","wifi":{"connected":true,"mode":"station","ssid":"HomeWifi-XXXX","ip":"192.168.1.42","rssi":-52},"ble":{"advertising":true,"connected":false}}
+```
+
+- `resetReason`: `power-on`, `software`, `crash`, `watchdog`, `brownout`, `external`, `deep-sleep` or `unknown`.
+- `slot`: the running OTA slot (`ota_0` or `ota_1`).
+- `wifi.mode`: `station` (home network) or `ap` (fallback access point). `ssid` and `ip` are present when connected, or in `ap` mode (then they are the access point's); `rssi` (dBm) only when connected as a station.
+- `ble.advertising`: waiting for a connection; `ble.connected`: a client is connected.
+- Other lines on the port (boot messages, which include the API key) must be ignored: only lines starting with `AIRBOX ` belong to this protocol. The answer itself never contains the API key.
+- The command changes nothing and never touches a relay. Firmware older than 1.0.4 does not know it and stays silent.
+
 ## Real-time WebSocket
 
 `ws://airbox.local/ws?key=<api_key>` (the key is passed as a query parameter — browsers don't allow custom headers on the WebSocket upgrade).
