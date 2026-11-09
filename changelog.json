@@ -1,0 +1,38 @@
+{
+  "versions": [
+    {
+      "version": "1.0.4",
+      "date": "2026-11-09",
+      "en": [
+        "Board diagnostic over USB: the install page reads the firmware version, Wi-Fi and Bluetooth state (new read-only `airbox.info` serial command).",
+        "The install page shows the changelog and is available in English and French."
+      ],
+      "fr": [
+        "Diagnostic de la carte par USB : la page d'installation lit la version du firmware et l'état du Wi-Fi et du Bluetooth (nouvelle commande série `airbox.info`, en lecture seule).",
+        "La page d'installation affiche le journal des modifications et existe en anglais et en français."
+      ]
+    },
+    {
+      "version": "1.0.3",
+      "date": "2026-11-09",
+      "en": [
+        "USB install page, published on GitHub Pages: install or repair an Airbox from the browser."
+      ],
+      "fr": [
+        "Page d'installation par USB, publiée sur GitHub Pages : installer ou réparer une Airbox depuis le navigateur."
+      ]
+    },
+    {
+      "version": "1.0.2",
+      "date": "2026-10-24",
+      "en": [
+        "First published release: the OTA image and its SHA-256 are attached to the GitHub release.",
+        "`GET /api/system/info` reports the firmware `version`, so the app can offer updates."
+      ],
+      "fr": [
+        "Première version publiée : l'image OTA et sa somme SHA-256 sont jointes à la release GitHub.",
+        "`GET /api/system/info` renvoie la `version` du firmware, pour que l'app puisse proposer les mises à jour."
+      ]
+    }
+  ]
+}

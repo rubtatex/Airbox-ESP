@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Install the Airbox firmware</title>
+<meta name="description" content="Install or repair the firmware of an Airbox plugged in over USB, from the browser.">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+/* A plain website that keeps the identity of the Airbox app: its icon, blue accent, status colors and tone.
+   Same look as the sequences site (rubtatex/airbox-sequences). */
+:root{
+  --bg:#f7f8fa; --panel:#ffffff; --fg:#14181f; --muted:#5f6b7a; --line:#dde2e9; --accent:#0a6cf0; --accent-fg:#ffffff;
+  --green:#1f9d55; --orange:#c76a00; --red:#d92d20; --code:#eef1f5; --warnbg:#fff4e5; --okbg:#e8f6ee; --badbg:#fdecea;
+  --font-ui:system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e1116; --panel:#161b22; --fg:#e8ecf1; --muted:#9aa5b3; --line:#2b333d; --accent:#4d9bff; --accent-fg:#06121f;
+  --green:#4cc38a; --orange:#f0a24b; --red:#ff7b72; --code:#1f262f; --warnbg:#2a2113; --okbg:#122419; --badbg:#2d1715;}}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--font-ui);
+  padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+a{color:var(--accent)}
+code{font-family:var(--font-mono);font-size:.85em;background:var(--code);padding:1px 6px;border-radius:4px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{font:inherit;color:inherit}
+
+.site{background:var(--panel);border-bottom:1px solid var(--line)}
+.site-in{max-width:760px;margin:0 auto;padding:0 16px;display:flex;align-items:center;gap:20px}
+.brand{display:flex;align-items:center;gap:10px;padding:10px 0;font-weight:700}
+.brand img{width:30px;height:30px;border-radius:7px;display:block}
+.right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.ext{font-size:.88rem;color:var(--muted);text-decoration:none}
+.ext:hover{color:var(--fg)}
+.lang{display:flex;gap:4px}
+.flag{display:grid;place-items:center;width:36px;height:30px;border-radius:6px;border:1px solid var(--line);background:var(--panel);cursor:pointer;opacity:.6;padding:0}
+.flag:hover{opacity:1}
+.flag[aria-pressed="true"]{opacity:1;border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.flag svg{display:block;width:24px;height:auto;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+
+main{max-width:760px;margin:0 auto;padding:24px 16px 56px;display:flex;flex-direction:column;gap:18px}
+h1{font-size:1.4rem;margin:0 0 4px}
+h2{font-size:1.05rem;margin:6px 0 0}
+h3{font-size:.95rem;margin:0}
+p{margin:0}.muted{color:var(--muted)}.sub{color:var(--muted);font-size:.86rem}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
+.panel>header{padding:9px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:10px 24px;padding:14px 16px;margin:0}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;padding:11px 14px;margin:0;font-size:.9rem}
+.kv dt{color:var(--muted)}.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.mono{font-family:var(--font-mono);font-size:.92rem}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}
+.dot.off{background:var(--orange)}
+.checks{list-style:none;margin:0;padding:6px 16px}
+.checks li{display:flex;gap:10px;padding:7px 0}
+.checks li+li{border-top:1px solid var(--line)}
+.checks .chk{color:var(--green);font-weight:700}
+.pill{font-size:.72rem;font-weight:700;border-radius:999px;padding:1px 9px;white-space:nowrap}
+.p-ok{background:var(--okbg);color:var(--green)}.p-warn{background:var(--warnbg);color:var(--orange)}.p-off{background:var(--code);color:var(--muted)}
+
+esp-web-install-button{display:block;--md-sys-color-primary:var(--accent);--md-sys-color-on-primary:var(--accent-fg)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:.92rem;font-weight:500;background:var(--accent);color:var(--accent-fg);border:1px solid var(--accent);border-radius:6px;padding:8px 16px;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn.alt{background:var(--panel);color:var(--fg);border-color:var(--line)}
+.btn.alt:hover{background:var(--code);filter:none}
+.btn.sm{padding:4px 10px;font-size:.84rem}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.warn{background:var(--warnbg);border-radius:8px;padding:12px 14px;color:var(--orange);font-weight:600}
+.warn span{display:block;color:var(--muted);font-weight:400;font-size:.9rem;margin-top:2px}
+.bad{background:var(--badbg);border-radius:8px;padding:12px 14px;color:var(--red);font-weight:600}
+.bad span{display:block;color:var(--muted);font-weight:400;font-size:.9rem;margin-top:2px}
+.note{background:var(--code);border-radius:8px;padding:10px 14px;font-size:.9rem}
+.stack{display:flex;flex-direction:column;gap:12px}
+.pad{padding:14px}
+.spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
+/* changelog */
+.ver{padding:11px 14px;border-top:1px solid var(--line)}
+.ver:first-child{border-top:0}
+.vh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ver ul{margin:8px 0 0;padding-left:1.2rem;display:flex;flex-direction:column;gap:3px;font-size:.9rem}
+details.older{border-top:1px solid var(--line)}
+details.older>summary{padding:10px 14px;color:var(--muted);font-size:.9rem;cursor:pointer}
+details.older .ver:first-of-type{border-top:1px solid var(--line)}
+
+/* report */
+.report{font-family:var(--font-mono);font-size:.76rem;background:var(--code);border:0;border-radius:6px;padding:10px 12px;color:var(--fg);width:100%;min-height:7.5em;resize:vertical;line-height:1.55}
+.check{display:flex;gap:8px;align-items:center;font-size:.88rem}
+@media(max-width:480px){.facts,.kv{grid-template-columns:1fr;gap:2px}.facts dd,.kv dd{margin-bottom:8px}}
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="site-in">
+    <span class="brand"><img src="icon.png" alt="" width="30" height="30">Airbox</span>
+    <div class="right">
+      <div class="lang" role="group" id="lang-group">
+        <button class="flag" type="button" data-lang="en" aria-pressed="false" aria-label="English" title="English"><svg viewBox="0 0 60 30" aria-hidden="true"><rect width="60" height="30" fill="#012169"/><path d="M0,0 60,30M60,0 0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 60,30M60,0 0,30" stroke="#C8102E" stroke-width="2"/><path d="M30,0v30M0,15h60" stroke="#fff" stroke-width="10"/><path d="M30,0v30M0,15h60" stroke="#C8102E" stroke-width="6"/></svg></button>
+        <button class="flag" type="button" data-lang="fr" aria-pressed="false" aria-label="Français" title="Français"><svg viewBox="0 0 60 40" aria-hidden="true"><rect width="20" height="40" fill="#0055A4"/><rect x="20" width="20" height="40" fill="#fff"/><rect x="40" width="20" height="40" fill="#EF4135"/></svg></button>
+      </div>
+      <a class="ext" href="https://github.com/rubtatex/Airbox-ESP" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div>
+    <h1 data-i18n="title">Install the firmware</h1>
+    <p class="muted" data-i18n="intro">Install or repair an Airbox plugged into this computer, without PlatformIO or the command line.</p>
+  </div>
+
+  <dl class="panel facts">
+    <dt data-i18n="latest">Latest version</dt><dd class="mono" id="version">…</dd>
+    <dt data-i18n="browser">Browser</dt><dd><span class="dot" id="browser-dot"></span><span id="browser-text" data-i18n="compatible">Compatible</span></dd>
+  </dl>
+
+  <section>
+    <h2 data-i18n="before">Before installing</h2>
+    <ul class="panel checks" style="margin-top:8px">
+      <li><span class="chk">✓</span><span data-i18n="check1">Airbox plugged in over USB</span></li>
+      <li><span class="chk">✓</span><span data-i18n="check2">Chrome or Edge on a computer</span></li>
+      <li><span class="chk">✓</span><span data-i18n="check3">Do not unplug during the installation</span></li>
+    </ul>
+  </section>
+
+  <section class="stack">
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate" class="btn" type="button" id="install" data-i18n="install_latest">Install the latest version</button>
+      <div slot="unsupported" class="warn"><span style="color:inherit;font-weight:600;margin:0" data-i18n="unsupported_t">Chrome or Edge required</span><span data-i18n="unsupported_d">Safari, Firefox and phone browsers cannot talk to a USB port. Open this page on a computer.</span></div>
+      <div slot="not-allowed" class="warn"><span style="color:inherit;font-weight:600;margin:0" data-i18n="insecure_t">Insecure page</span><span data-i18n="insecure_d">USB installation needs an https address.</span></div>
+    </esp-web-install-button>
+    <p class="note" data-i18n="erase_note">In the window that opens, leave the erase box unticked to keep the Wi-Fi, API key, caps and language. Ticked, the Airbox will have to be paired again in the app. It restarts disarmed.</p>
+    <p class="sub" data-i18n="boot_hint">The Airbox port does not show up? Unplug it, hold its BOOT button, plug it back in, then release. The install window itself is in English.</p>
+  </section>
+
+  <!-- What's new -->
+  <section>
+    <h2 data-i18n="news">What's new</h2>
+    <div class="panel" id="news" style="margin-top:8px"><div class="pad muted" data-i18n="loading">Loading…</div></div>
+  </section>
+
+  <!-- Board diagnostic -->
+  <section>
+    <h2 data-i18n="diag">Board diagnostic</h2>
+    <div class="stack" id="diag" style="margin-top:8px"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- translations ----------
+  var T = {
+    en: {
+      doc_title: 'Install the Airbox firmware', doc_desc: 'Install or repair the firmware of an Airbox plugged in over USB, from the browser.',
+      title: 'Install the firmware', intro: 'Install or repair an Airbox plugged into this computer, without PlatformIO or the command line.',
+      latest: 'Latest version', browser: 'Browser', compatible: 'Compatible', incompatible: 'Not compatible',
+      before: 'Before installing', check1: 'Airbox plugged in over USB', check2: 'Chrome or Edge on a computer', check3: 'Do not unplug during the installation',
+      install_latest: 'Install the latest version', install_version: 'Install version {v}',
+      unsupported_t: 'Chrome or Edge required', unsupported_d: 'Safari, Firefox and phone browsers cannot talk to a USB port. Open this page on a computer.',
+      insecure_t: 'Insecure page', insecure_d: 'USB installation needs an https address.',
+      erase_note: 'In the window that opens, leave the erase box unticked to keep the Wi-Fi, API key, caps and language. Ticked, the Airbox will have to be paired again in the app. It restarts disarmed.',
+      boot_hint: 'The Airbox port does not show up? Unplug it, hold its BOOT button, plug it back in, then release. The install window itself is in English.',
+      news: "What's new", loading: 'Loading…', latest_pill: 'Latest', installed_pill: 'Installed', older: 'Earlier versions ({list})',
+      news_error_t: 'The changelog could not be loaded', news_error_d: 'The install button still works.', retry: 'Retry', on_github: 'See on GitHub ↗', no_news: 'No changelog yet.',
+      diag: 'Board diagnostic', diag_intro: 'Reads the data of an Airbox plugged in over USB. The board restarts during the reading and comes back disarmed.',
+      read_board: 'Read the board', read_again: 'Read again', read_fw_only: 'Read the firmware only', copy_report: 'Copy the report', copied: 'Report copied.', copy_failed: 'Copy failed: select the text and copy it.',
+      reading_chip: 'Reading the chip…', waiting_fw: 'Waiting for the firmware to answer (up to 10 s)…',
+      card: 'Board', chip: 'Chip', flash: 'Flash', mac: 'MAC address', firmware: 'Firmware', version: 'Version', latest_version: 'Latest version',
+      uptime: 'Running for', last_reset: 'Last restart', slot: 'Slot', wifi: 'Wi-Fi', bluetooth: 'Bluetooth',
+      up_to_date: 'Up to date', update_available: 'Update available', dev_build: 'Local build', newer_build: 'Newer than the latest release',
+      connected: 'Connected', not_connected: 'Not connected', ap_on: 'Access point', mode: 'Mode', network: 'Network', ip: 'IP address', signal: 'Signal',
+      mode_station: 'Home network', mode_ap: 'Fallback access point', signal_good: 'good', signal_fair: 'fair', signal_weak: 'weak',
+      state: 'State', ble_idle: 'Active, no device connected', ble_conn: 'Active, a device is connected', ble_off: 'Not advertising',
+      ble_pill_wait: 'Waiting', ble_pill_conn: 'Connected', ble_pill_off: 'Off',
+      reset_power_on: 'Power on', reset_software: 'Software restart', reset_crash: 'Crash', reset_watchdog: 'Watchdog', reset_brownout: 'Power dip', reset_external: 'Reset button', reset_deep_sleep: 'Deep sleep', reset_unknown: 'Unknown',
+      sec: '{n} s', min: '{n} min', hour: '{n} h',
+      no_answer_t: 'The firmware did not answer', no_answer_d: 'It is missing, older than the version with diagnostic (before 1.0.4) or stopped. Install the latest version with the button above, then read the board again.',
+      port_lost_t: 'The port disappeared during the restart', port_lost_d: 'Click “Read the firmware only” and choose the port again.',
+      err_unsupported: 'This browser cannot read a USB port. Use Chrome or Edge on a computer.',
+      err_chip: 'The chip could not be read: {m}', err_cancel: 'No port selected.',
+      mask_label: 'Hide the network name and the IP address', report_note: 'The report is always in English, so anyone helping you can read it. The API key is never in it.',
+      report_title: 'Airbox diagnostic'
+    },
+    fr: {
+      doc_title: "Installer le firmware Airbox", doc_desc: "Installez ou réparez le firmware d'une Airbox branchée en USB, depuis le navigateur.",
+      title: 'Installer le firmware', intro: 'Installez ou réparez une Airbox branchée à cet ordinateur, sans PlatformIO ni ligne de commande.',
+      latest: 'Dernière version', browser: 'Navigateur', compatible: 'Compatible', incompatible: 'Non compatible',
+      before: "Avant d'installer", check1: 'Airbox branchée en USB', check2: 'Chrome ou Edge sur ordinateur', check3: "Ne pas débrancher pendant l'installation",
+      install_latest: 'Installer la dernière version', install_version: 'Installer la version {v}',
+      unsupported_t: 'Chrome ou Edge requis', unsupported_d: 'Safari, Firefox et les navigateurs de téléphone ne savent pas parler à un port USB. Ouvrez cette page sur un ordinateur.',
+      insecure_t: 'Page non sécurisée', insecure_d: "L'installation par USB demande une adresse en https.",
+      erase_note: "Dans la fenêtre qui s'ouvre, laissez la case d'effacement décochée pour garder le WiFi, la clé API, les plafonds et la langue. Cochée, l'Airbox devra être appairée à nouveau dans l'app. Elle redémarre désarmée.",
+      boot_hint: "Le port de l'Airbox n'apparaît pas ? Débranchez-la, maintenez son bouton BOOT, rebranchez-la, puis relâchez. La fenêtre d'installation elle-même est en anglais.",
+      news: 'Nouveautés', loading: 'Chargement…', latest_pill: 'Dernière', installed_pill: 'Installée', older: 'Versions précédentes ({list})',
+      news_error_t: "Le journal n'a pas pu être chargé", news_error_d: "Le bouton d'installation fonctionne toujours.", retry: 'Réessayer', on_github: 'Voir sur GitHub ↗', no_news: "Pas encore de journal des modifications.",
+      diag: 'Diagnostic de la carte', diag_intro: "Lit les données d'une Airbox branchée en USB. La carte redémarre pendant la lecture, elle revient désarmée.",
+      read_board: 'Lire la carte', read_again: 'Relire', read_fw_only: 'Lire seulement le firmware', copy_report: 'Copier le rapport', copied: 'Rapport copié.', copy_failed: 'Copie impossible : sélectionnez le texte et copiez-le.',
+      reading_chip: 'Lecture de la puce…', waiting_fw: 'Attente de la réponse du firmware (jusqu\'à 10 s)…',
+      card: 'Carte', chip: 'Puce', flash: 'Flash', mac: 'Adresse MAC', firmware: 'Firmware', version: 'Version', latest_version: 'Dernière version',
+      uptime: 'Démarrée depuis', last_reset: 'Dernier redémarrage', slot: 'Emplacement', wifi: 'Wi-Fi', bluetooth: 'Bluetooth',
+      up_to_date: 'À jour', update_available: 'Mise à jour disponible', dev_build: 'Version locale', newer_build: 'Plus récente que la dernière release',
+      connected: 'Connecté', not_connected: 'Non connecté', ap_on: "Point d'accès", mode: 'Mode', network: 'Réseau', ip: 'Adresse IP', signal: 'Signal',
+      mode_station: 'Réseau domestique', mode_ap: "Point d'accès de secours", signal_good: 'bon', signal_fair: 'moyen', signal_weak: 'faible',
+      state: 'État', ble_idle: 'Actif, aucun appareil connecté', ble_conn: 'Actif, un appareil est connecté', ble_off: 'Non visible',
+      ble_pill_wait: 'En attente', ble_pill_conn: 'Connecté', ble_pill_off: 'Inactif',
+      reset_power_on: 'Mise sous tension', reset_software: 'Redémarrage logiciel', reset_crash: 'Plantage', reset_watchdog: 'Chien de garde', reset_brownout: 'Baisse de tension', reset_external: 'Bouton reset', reset_deep_sleep: 'Veille profonde', reset_unknown: 'Inconnu',
+      sec: '{n} s', min: '{n} min', hour: '{n} h',
+      no_answer_t: "Le firmware n'a pas répondu", no_answer_d: "Il est absent, trop ancien (avant la version 1.0.4, qui a le diagnostic) ou en panne. Installez la dernière version avec le bouton ci-dessus, puis relisez la carte.",
+      port_lost_t: 'Le port a disparu pendant le redémarrage', port_lost_d: 'Cliquez sur « Lire seulement le firmware » et choisissez à nouveau le port.',
+      err_unsupported: "Ce navigateur ne sait pas lire un port USB. Utilisez Chrome ou Edge sur ordinateur.",
+      err_chip: "La puce n'a pas pu être lue : {m}", err_cancel: 'Aucun port choisi.',
+      mask_label: "Masquer le nom du réseau et l'adresse IP", report_note: "Le rapport est toujours en anglais, pour être compris par n'importe qui qui vous aide. La clé API n'y figure jamais.",
+      report_title: 'Airbox diagnostic'
+    }
+  };
+  var lang = 'en';
+  function t(key, vars) {
+    var s = (T[lang] && T[lang][key]) || T.en[key] || key;
+    if (vars) Object.keys(vars).forEach(function (k) { s = s.replace('{' + k + '}', vars[k]); });
+    return s;
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function $(id) { return document.getElementById(id); }
+  function stored(v) { try { if (v === undefined) return localStorage.getItem('airbox-lang'); localStorage.setItem('airbox-lang', v); } catch (e) { return null; } }
+
+  // ---------- state ----------
+  var latestVersion = null;       // from manifest.json
+  var changelog = null, changelogError = false;
+  var diag = { phase: 'idle', chip: null, fw: null, error: null, portLost: false, mask: true, copied: false };
+
+  // ---------- helpers ----------
+  function parseVer(s) { var m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(s)); return m ? [+m[1], +m[2], +m[3]] : null; }
+  function cmpVer(a, b) { for (var i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1; return 0; }
+  function fmtDuration(ms) {
+    var s = Math.round(ms / 1000);
+    if (s < 60) return t('sec', { n: s });
+    var m = Math.floor(s / 60);
+    if (m < 60) return t('min', { n: m });
+    var h = Math.floor(m / 60), r = m % 60;
+    return t('hour', { n: h }) + (r ? ' ' + t('min', { n: r }) : '');
+  }
+  function fmtDate(iso) {
+    var d = new Date(iso + 'T12:00:00');
+    if (isNaN(d)) return iso;
+    try { return new Intl.DateTimeFormat(lang, { year: 'numeric', month: 'short', day: 'numeric' }).format(d); } catch (e) { return iso; }
+  }
+  function inline(text) { return esc(text).replace(/`([^`]+)`/g, '<code>$1</code>'); }
+  function signalQuality(rssi) { return rssi >= -60 ? 'good' : rssi >= -75 ? 'fair' : 'weak'; }
+
+  // ---------- translation pass ----------
+  function applyLang() {
+    document.documentElement.lang = lang;
+    document.title = t('doc_title');
+    var d = document.querySelector('meta[name="description"]'); if (d) d.setAttribute('content', t('doc_desc'));
+    document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = t(el.getAttribute('data-i18n')); });
+    document.querySelectorAll('#lang-group [data-lang]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-lang') === lang ? 'true' : 'false'); });
+    $('lang-group').setAttribute('aria-label', lang === 'fr' ? 'Langue' : 'Language');
+    if (!('serial' in navigator)) $('browser-text').textContent = t('incompatible');
+    if (latestVersion) $('install').textContent = t('install_version', { v: latestVersion });
+    renderNews(); renderDiag();
+  }
+  function setLang(l) { lang = l; stored(l); applyLang(); }
+
+  // ---------- what's new ----------
+  function renderNews() {
+    var el = $('news');
+    if (changelogError) {
+      el.innerHTML = '<div class="pad stack"><div class="warn">' + esc(t('news_error_t')) + '<span>' + esc(t('news_error_d')) + '</span></div><div class="row"><button class="btn alt sm" type="button" id="news-retry">' + esc(t('retry')) + '</button><a class="btn alt sm" href="https://github.com/rubtatex/Airbox-ESP/releases" target="_blank" rel="noopener">' + esc(t('on_github')) + '</a></div></div>';
+      $('news-retry').addEventListener('click', loadChangelog); return;
+    }
+    if (!changelog) { el.innerHTML = '<div class="pad muted">' + esc(t('loading')) + '</div>'; return; }
+    var list = changelog.versions || [];
+    if (!list.length) { el.innerHTML = '<div class="pad muted">' + esc(t('no_news')) + '</div>'; return; }
+    var installed = diag.fw && diag.fw.version;
+    function block(v, isLatest) {
+      var items = (v[lang] && v[lang].length ? v[lang] : v.en) || [];
+      return '<div class="ver"><div class="vh"><b class="mono">' + esc(v.version) + '</b>' + (v.date ? '<span class="sub">' + esc(fmtDate(v.date)) + '</span>' : '') +
+        (isLatest ? '<span class="pill p-ok">' + esc(t('latest_pill')) + '</span>' : '') +
+        (installed && installed === v.version ? '<span class="pill p-off">' + esc(t('installed_pill')) + '</span>' : '') +
+        '</div><ul>' + items.map(function (i) { return '<li>' + inline(i) + '</li>'; }).join('') + '</ul></div>';
+    }
+    var html = block(list[0], true);
+    if (list.length > 1) {
+      var names = list.slice(1).map(function (v) { return v.version; }).join(', ');
+      html += '<details class="older"><summary>' + esc(t('older', { list: names })) + '</summary>' + list.slice(1).map(function (v) { return block(v, false); }).join('') + '</details>';
+    }
+    el.innerHTML = html;
+  }
+  function loadChangelog() {
+    changelogError = false; changelog = null; renderNews();
+    fetch('changelog.json', { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) { if (!j || !Array.isArray(j.versions)) throw new Error('format'); changelog = j; })
+      .catch(function () { changelogError = true; })
+      .then(renderNews);
+  }
+
+  // ---------- board diagnostic ----------
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var TIMEOUT = {};
+
+  async function readChip(port) {
+    var mod = await import('https://unpkg.com/esptool-js@0.5.7/bundle.js');
+    var transport = new mod.Transport(port, false);
+    var quiet = { clean: function () {}, writeLine: function () {}, write: function () {} };
+    var loader = new mod.ESPLoader({ transport: transport, baudrate: 115200, romBaudrate: 115200, terminal: quiet });
+    var info = {};
+    try {
+      info.description = await loader.main();
+      try { info.mac = await loader.chip.readMac(loader); } catch (e) { /* optional */ }
+      try { var kb = await loader.getFlashSize(); if (kb) info.flashKB = kb; } catch (e) { /* optional */ }
+      await loader.after('hard_reset');
+    } finally {
+      try { await transport.disconnect(); } catch (e) { /* port may be gone already */ }
+    }
+    return info;
+  }
+
+  // Sends "airbox.info" until a line starting with "AIRBOX " answers. Every other line (boot messages, which
+  // include the API key) is dropped as soon as it is read and never stored or shown.
+  async function queryFirmware(port, timeoutMs) {
+    await port.open({ baudRate: 115200 });
+    var writer = port.writable.getWriter(), reader = port.readable.getReader();
+    var dec = new TextDecoder(), enc = new TextEncoder(), buf = '', result = null;
+    var deadline = Date.now() + timeoutMs, lastSend = 0, pending = reader.read();
+    try {
+      while (!result && Date.now() < deadline) {
+        if (Date.now() - lastSend > 1500) { await writer.write(enc.encode('airbox.info\n')); lastSend = Date.now(); }
+        var r = await Promise.race([pending, sleep(300).then(function () { return TIMEOUT; })]);
+        if (r === TIMEOUT) continue;
+        if (r.done) break;
+        pending = reader.read();
+        buf += dec.decode(r.value, { stream: true });
+        var parts = buf.split('\n');
+        buf = parts.pop();
+        if (buf.length > 2048) buf = '';
+        for (var i = 0; i < parts.length && !result; i++) {
+          var line = parts[i].replace(/\r$/, '');
+          if (line.indexOf('AIRBOX ') === 0) {
+            try { var j = JSON.parse(line.slice(7)); if (j && typeof j.version === 'string') result = j; } catch (e) { /* partial line */ }
+          }
+        }
+      }
+    } finally {
+      try { await reader.cancel(); } catch (e) { /* ignore */ }
+      try { reader.releaseLock(); } catch (e) { /* ignore */ }
+      try { writer.releaseLock(); } catch (e) { /* ignore */ }
+      try { await port.close(); } catch (e) { /* ignore */ }
+    }
+    return result;
+  }
+
+  async function runDiag(withChip) {
+    if (!('serial' in navigator)) { diag = { phase: 'error', error: t('err_unsupported'), mask: diag.mask }; renderDiag(); return; }
+    var port;
+    try { port = await navigator.serial.requestPort(); }
+    catch (e) { diag.phase = diag.chip || diag.fw ? 'done' : 'idle'; diag.error = e && e.name === 'NotFoundError' ? null : String(e && e.message || e); renderDiag(); return; }
+    diag = { phase: 'chip', chip: withChip ? null : diag.chip, fw: null, error: null, portLost: false, mask: diag.mask, copied: false };
+    renderDiag();
+    if (withChip) {
+      try { diag.chip = await readChip(port); }
+      catch (e) { diag.error = t('err_chip', { m: String(e && e.message || e) }); }
+    }
+    diag.phase = 'fw'; renderDiag();
+    try { diag.fw = await queryFirmware(port, 10000); }
+    catch (e) { diag.portLost = true; }
+    diag.phase = 'done'; renderDiag(); renderNews();
+  }
+
+  function fwStatus(version) {
+    if (version === 'dev') return { key: 'dev_build', cls: 'p-off' };
+    var cur = parseVer(version), last = parseVer(latestVersion);
+    if (!cur || !last) return null;
+    var c = cmpVer(cur, last);
+    return c === 0 ? { key: 'up_to_date', cls: 'p-ok' } : c < 0 ? { key: 'update_available', cls: 'p-warn' } : { key: 'newer_build', cls: 'p-off' };
+  }
+  function resetName(r) { return t('reset_' + String(r || 'unknown').replace(/-/g, '_')); }
+  function flashText(kb) { return kb >= 1024 ? (kb / 1024) + (lang === 'fr' ? ' Mo' : ' MB') : kb + ' KB'; }
+
+  function reportText() {
+    var m = diag.mask, L = [];
+    L.push(T.en.report_title + ' · ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC');
+    if (diag.chip) {
+      L.push('Chip: ' + (diag.chip.description || 'unknown') + (diag.chip.flashKB ? ' · ' + flashText2(diag.chip.flashKB) + ' flash' : '') + (diag.chip.mac ? ' · MAC ' + diag.chip.mac : ''));
+    }
+    var f = diag.fw;
+    if (f) {
+      L.push('Firmware: ' + f.version + (latestVersion ? ' (latest: ' + latestVersion + ')' : '') + ' · up ' + Math.round((f.uptimeMs || 0) / 60000) + ' min · reset: ' + (f.resetReason || 'unknown') + (f.slot ? ' · slot ' + f.slot : ''));
+      var w = f.wifi || {};
+      L.push('Wi-Fi: ' + (w.connected ? 'connected' : 'not connected') + ' · ' + (w.mode || 'unknown') +
+        (w.ssid ? ' · SSID ' + (m ? '********' : w.ssid) : '') + (w.ip ? ' · IP ' + (m ? '********' : w.ip) : '') + (typeof w.rssi === 'number' ? ' · ' + w.rssi + ' dBm' : ''));
+      var b = f.ble || {};
+      L.push('Bluetooth: ' + (b.connected ? 'client connected' : b.advertising ? 'advertising · no client' : 'not advertising'));
+    } else if (diag.phase === 'done') {
+      L.push('Firmware: no answer');
+    }
+    return L.join('\n');
+  }
+  function flashText2(kb) { return kb >= 1024 ? (kb / 1024) + ' MB' : kb + ' KB'; }
+
+  function kv(rows) { return '<dl class="kv">' + rows.map(function (r) { return '<dt>' + esc(r[0]) + '</dt><dd' + (r[2] ? ' class="mono"' : '') + '>' + esc(r[1]) + '</dd>'; }).join('') + '</dl>'; }
+  function panel(title, pill, body) {
+    return '<div class="panel"><header><h3>' + esc(title) + '</h3>' + (pill ? '<span class="pill ' + pill.cls + '">' + esc(pill.text) + '</span>' : '') + '</header>' + body + '</div>';
+  }
+  function renderDiag() {
+    var el = $('diag'), h = '';
+    if (diag.phase === 'idle') {
+      h = '<div class="panel pad stack"><p class="sub">' + esc(t('diag_intro')) + '</p><div class="row"><button class="btn" type="button" id="d-read">' + esc(t('read_board')) + '</button></div>' +
+        (diag.error ? '<div class="bad">' + esc(diag.error) + '</div>' : '') + '</div>';
+    } else if (diag.phase === 'chip' || diag.phase === 'fw') {
+      h = '<div class="panel pad stack"><div class="row"><span class="spin" aria-hidden="true"></span><span>' + esc(diag.phase === 'chip' ? t('reading_chip') : t('waiting_fw')) + '</span></div></div>';
+    } else if (diag.phase === 'error') {
+      h = '<div class="bad">' + esc(diag.error) + '</div>';
+    } else {
+      if (diag.error) h += '<div class="bad">' + esc(diag.error) + '</div>';
+      if (diag.chip) {
+        var rows = [[t('chip'), diag.chip.description || '-']];
+        if (diag.chip.flashKB) rows.push([t('flash'), flashText(diag.chip.flashKB)]);
+        if (diag.chip.mac) rows.push([t('mac'), diag.chip.mac, true]);
+        h += panel(t('card'), null, kv(rows));
+      }
+      var f = diag.fw;
+      if (f) {
+        var st = fwStatus(f.version);
+        var rowsF = [[t('version'), f.version, true]];
+        if (latestVersion) rowsF.push([t('latest_version'), latestVersion, true]);
+        rowsF.push([t('uptime'), fmtDuration(f.uptimeMs || 0)], [t('last_reset'), resetName(f.resetReason)]);
+        if (f.slot) rowsF.push([t('slot'), f.slot, true]);
+        h += panel(t('firmware'), st && { cls: st.cls, text: t(st.key) }, kv(rowsF));
+        var w = f.wifi || {};
+        var rowsW = [[t('mode'), t(w.mode === 'ap' ? 'mode_ap' : 'mode_station')]];
+        if (w.ssid) rowsW.push([t('network'), w.ssid]);
+        if (w.ip) rowsW.push([t('ip'), w.ip, true]);
+        if (typeof w.rssi === 'number') rowsW.push([t('signal'), w.rssi + ' dBm, ' + t('signal_' + signalQuality(w.rssi))]);
+        h += panel(t('wifi'), { cls: w.connected ? 'p-ok' : 'p-off', text: w.connected ? t('connected') : (w.mode === 'ap' ? t('ap_on') : t('not_connected')) }, kv(rowsW));
+        var b = f.ble || {};
+        h += panel(t('bluetooth'), { cls: b.connected ? 'p-ok' : 'p-off', text: b.connected ? t('ble_pill_conn') : b.advertising ? t('ble_pill_wait') : t('ble_pill_off') },
+          kv([[t('state'), b.connected ? t('ble_conn') : b.advertising ? t('ble_idle') : t('ble_off')]]));
+      } else {
+        h += '<div class="warn">' + esc(diag.portLost ? t('port_lost_t') : t('no_answer_t')) + '<span>' + esc(diag.portLost ? t('port_lost_d') : t('no_answer_d')) + '</span></div>';
+      }
+      h += '<div class="stack"><label class="check"><input type="checkbox" id="d-mask"' + (diag.mask ? ' checked' : '') + '> ' + esc(t('mask_label')) + '</label>' +
+        '<textarea class="report" id="d-report" readonly rows="6" aria-label="Report">' + esc(reportText()) + '</textarea>' +
+        '<p class="sub">' + esc(t('report_note')) + '</p>' +
+        '<div class="row"><button class="btn" type="button" id="d-copy">' + esc(t('copy_report')) + '</button><button class="btn alt" type="button" id="d-read">' + esc(t('read_again')) + '</button>' +
+        (!f ? '<button class="btn alt" type="button" id="d-fw">' + esc(t('read_fw_only')) + '</button>' : '') + '</div><span class="sub" id="d-msg" role="status"></span></div>';
+    }
+    el.innerHTML = h;
+    var read = $('d-read'); if (read) read.addEventListener('click', function () { runDiag(true); });
+    var fwOnly = $('d-fw'); if (fwOnly) fwOnly.addEventListener('click', function () { runDiag(false); });
+    var mask = $('d-mask'); if (mask) mask.addEventListener('change', function () { diag.mask = mask.checked; $('d-report').value = reportText(); });
+    var copy = $('d-copy'); if (copy) copy.addEventListener('click', function () {
+      var area = $('d-report'), msg = $('d-msg');
+      function fallback() { area.select(); try { document.execCommand('copy'); msg.textContent = t('copied'); } catch (e) { msg.textContent = t('copy_failed'); } }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(area.value).then(function () { msg.textContent = t('copied'); }, fallback);
+      else fallback();
+    });
+  }
+
+  // ---------- init ----------
+  var saved = stored();
+  lang = saved === 'fr' || saved === 'en' ? saved : ((navigator.language || 'en').toLowerCase().indexOf('fr') === 0 ? 'fr' : 'en');
+  if (!('serial' in navigator)) $('browser-dot').classList.add('off');
+  document.querySelectorAll('#lang-group [data-lang]').forEach(function (b) { b.addEventListener('click', function () { setLang(b.getAttribute('data-lang')); }); });
+  fetch('manifest.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (m) { latestVersion = m.version; $('version').textContent = m.version; $('install').textContent = t('install_version', { v: m.version }); renderDiag(); })
+    .catch(function () { $('version').textContent = '?'; });
+  applyLang();
+  loadChangelog();
+
+  window.__airbox = { runDiag: runDiag, reportText: reportText, setLang: setLang };
+})();
+</script>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+</body>
+</html>
