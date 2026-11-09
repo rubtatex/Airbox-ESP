@@ -19,6 +19,7 @@ cp web/index.html web/icon.png "$out/"
 cp "$build/bootloader.bin" "$build/partitions.bin" "$build/firmware.bin" "$out/"
 cp "$boot_app0" "$out/boot_app0.bin"
 touch "$out/.nojekyll"
+python3 scripts/changelog.py json > "$out/changelog.json"
 
 # Flash layout of the ESP32-C3 with the min_spiffs.csv partition table (platformio.ini).
 cat > "$out/manifest.json" <<JSON

@@ -38,6 +38,8 @@ class BleManager {
 
   // Used by DisplayManager to pick the screen (status vs connection QR).
   bool hasConnectedClient() const { return server_ && server_->getConnectedCount() > 0; }
+  // Used by SerialInfo (USB diagnostic).
+  bool isAdvertising() const { return server_ && server_->getAdvertising() && server_->getAdvertising()->isAdvertising(); }
 
  private:
   SafetyManager* safety_ = nullptr;
