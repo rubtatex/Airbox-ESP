@@ -2,6 +2,8 @@
 #   git tag v1.2.0 && git push origin v1.2.0
 # The release carries the OTA image (airbox-esp-1.2.0.bin) and its SHA-256 (airbox-esp-1.2.0.bin.sha256).
 # The Airbox iOS app reads the latest release of this repository to offer the update.
+# A stable release (no "-beta" suffix) also publishes the USB installer page, with the flash images,
+# on GitHub Pages (branch gh-pages, see web/ and scripts/build-site.sh).
 name: Release firmware
 
 on:
@@ -63,3 +65,15 @@ jobs:
           else
             gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Airbox firmware $VERSION" --generate-notes $flags
           fi
+
+      - name: Publish the USB installer on GitHub Pages
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: |
+          scripts/build-site.sh "$VERSION" site
+          cd site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "USB installer $VERSION"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages

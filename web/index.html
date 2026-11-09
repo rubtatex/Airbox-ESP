@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Installer le firmware Airbox</title>
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+/* Same visual language as the Airbox iOS app: grouped lists, system colors, prominent blue button. */
+:root {
+  --bg: #f2f2f7; --cell: #ffffff; --fg: #000000; --muted: #6c6c70; --line: #d1d1d6;
+  --accent: #007aff; --accent-fg: #ffffff; --green: #34c759; --orange: #ff9500; --code: #e9e9ee;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #000000; --cell: #1c1c1e; --fg: #ffffff; --muted: #98989f; --line: #38383a;
+          --accent: #0a84ff; --green: #30d158; --orange: #ff9f0a; --code: #2c2c2e; }
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 var(--font-ui); -webkit-font-smoothing: antialiased;
+  padding: 28px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px));
+}
+main { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+h2 { font-size: 0.8rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); margin: 0 0 7px 16px; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.foot { color: var(--muted); font-size: 0.82rem; margin: 7px 16px 0; }
+code { font-family: var(--font-mono); font-size: 0.84em; background: var(--code); padding: 1px 6px; border-radius: 5px; }
+
+.title { display: flex; align-items: center; gap: 14px; }
+.title img { width: 48px; height: 48px; border-radius: 11px; display: block; flex: none; }
+.title b { font-size: 1.25rem; display: block; }
+.title span { color: var(--muted); font-size: 0.9rem; }
+
+.group { background: var(--cell); border-radius: 12px; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; min-height: 44px; min-width: 0; }
+.row + .row { border-top: 0.5px solid var(--line); }
+.row .grow { flex: 1; min-width: 0; }
+.row .val { color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.mono { font-family: var(--font-mono); font-size: 0.85rem; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
+.dot.off { background: var(--orange); }
+.chk { color: var(--green); font-weight: 700; }
+
+esp-web-install-button { display: block; --md-sys-color-primary: var(--accent); --md-sys-color-on-primary: var(--accent-fg); }
+.btn { display: block; width: 100%; font: inherit; font-weight: 600; background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 12px; padding: 14px 20px; cursor: pointer; }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.warn { background: var(--cell); border-radius: 12px; padding: 14px 16px; color: var(--orange); font-weight: 600; }
+.warn span { display: block; color: var(--muted); font-weight: 400; font-size: 0.9rem; margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="title">
+    <img src="icon.png" alt="" width="48" height="48">
+    <div><b>Airbox</b><span>Installer le firmware</span></div>
+  </div>
+
+  <div class="group">
+    <div class="row"><span class="grow">Dernière version</span><span class="val mono" id="version">…</span></div>
+    <div class="row"><span class="grow">Navigateur</span><span class="val"><span class="dot" id="browser-dot"></span><span id="browser-text">Compatible</span></span></div>
+  </div>
+
+  <section>
+    <h2>Avant d'installer</h2>
+    <div class="group">
+      <div class="row"><span class="chk">✓</span><span class="grow">Airbox branchée en USB</span></div>
+      <div class="row"><span class="chk">✓</span><span class="grow">Chrome ou Edge sur ordinateur</span></div>
+      <div class="row"><span class="chk">✓</span><span class="grow">Ne pas débrancher pendant l'installation</span></div>
+    </div>
+  </section>
+
+  <section>
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate" class="btn" type="button" id="install">Installer la dernière version</button>
+      <div slot="unsupported" class="warn">Chrome ou Edge requis<span>Safari, Firefox et les navigateurs de téléphone ne savent pas parler à un port USB. Ouvrez cette page sur un ordinateur.</span></div>
+      <div slot="not-allowed" class="warn">Page non sécurisée<span>L'installation par USB demande une adresse en https.</span></div>
+    </esp-web-install-button>
+    <p class="foot">Dans la fenêtre qui s'ouvre, laissez la case d'effacement décochée pour garder le WiFi, la clé API, les plafonds et la langue. Cochée, l'Airbox devra être appairée à nouveau dans l'app. Elle redémarre désarmée.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  if (!('serial' in navigator)) {
+    document.getElementById('browser-dot').classList.add('off');
+    document.getElementById('browser-text').textContent = 'Non compatible';
+  }
+  fetch('manifest.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (m) {
+      document.getElementById('version').textContent = m.version;
+      document.getElementById('install').textContent = 'Installer la version ' + m.version;
+    })
+    .catch(function () { document.getElementById('version').textContent = 'inconnue'; });
+})();
+</script>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+</body>
+</html>
