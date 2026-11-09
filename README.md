@@ -57,6 +57,12 @@ PlatformIO installs the dependencies listed in [platformio.ini](platformio.ini):
 
 Pushing a tag `vMAJOR.MINOR.PATCH` (e.g. `git tag v1.2.0 && git push origin v1.2.0`) builds the firmware and publishes a GitHub release with `airbox-esp-<version>.bin` (the OTA image) and its `.sha256`. The version is reported as `version` by `GET /api/system/info`; local builds report `dev`. A tag with a suffix (`v1.3.0-beta1`) makes a pre-release, which the app ignores. The Airbox iOS app reads the latest release to offer the update.
 
+### USB installer page
+
+A stable release also publishes `web/index.html` and the flash images (bootloader, partitions, `boot_app0`, firmware) on GitHub Pages, at `https://rubtatex.github.io/Airbox-ESP/`. The page uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) to flash a plugged Airbox from the browser (Chrome or Edge on a computer, https only): first install, repair, or reflash. It keeps the Wi-Fi, API key and caps unless the erase box of the dialog is ticked. To show it on another site, embed it with `<iframe src="https://rubtatex.github.io/Airbox-ESP/" allow="serial" height="640"></iframe>` or link to it.
+
+One-time setup: after the first release has created the `gh-pages` branch, set Settings, Pages, Source to "Deploy from a branch", branch `gh-pages`, folder `/ (root)`.
+
 ## Tests
 
 The sequence format and state machine are plain C++ and have host-side tests (no board needed, only `g++`):
