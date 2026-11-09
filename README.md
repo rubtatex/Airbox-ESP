@@ -17,7 +17,7 @@ Firmware for a small breath-control device. It runs on a **Seeed XIAO ESP32-C3**
 - **Sequences played on the device**: the app sends a sequence (relay events with times), then starts it; it keeps running through a brief phone drop-out. It starts only when armed, goes through the same safety gate and caps, ends with every relay off, and is aborted if the app stays silent for too long.
 - **BLE GATT service** with the same controls, so it works with no Wi-Fi at all.
 - **Wi-Fi provisioning**: the device falls back to an open access point (`Airbox-XXXXXX`) and shows a QR code to join it. You can configure Wi-Fi over REST or BLE.
-- **OTA firmware updates** over Wi-Fi (only while disarmed).
+- **Firmware updates**: over Wi-Fi from the Airbox app (it downloads the latest GitHub release, checks its SHA-256 and sends it; only while disarmed), or over USB from a web page. `GET /api/system/info` reports the installed `version`.
 - **1.3" OLED status screen** (SH1106): safety state, relay states, cap countdown bars, connection QR code. Screen text is in English or French, switchable through the API.
 - mDNS: `http://airbox.local`.
 
@@ -84,6 +84,8 @@ The sequence format and state machine are plain C++ and have host-side tests (no
 
 ## Documentation
 
+- **[Airbox iOS app](https://github.com/rubtatex/Airbox-APP-ios)**: the phone app for this firmware (private repository).
+- **[Community sequences](https://github.com/rubtatex/airbox-sequences)**: shared sequences and an online editor.
 - **[API.md](API.md)**: full REST, WebSocket and BLE reference, safety model, and app guidelines. It is self-contained and written for mobile app developers.
 - **[test-app/](test-app/)**: a static, dependency-free web page for exercising every feature over Wi-Fi and Web Bluetooth. Serve it from `localhost` (`python -m http.server 8080`); see its [README](test-app/README.md).
 - **[.claude/CLAUDE.md](.claude/CLAUDE.md)**: detailed design notes for contributors: architecture, safety rationale, design decisions and their history, and pitfalls already hit.
